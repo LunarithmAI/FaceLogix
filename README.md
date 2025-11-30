@@ -36,7 +36,7 @@ Smart, secure face recognition attendance system built with FastAPI, React, and 
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/FaceLogix.git
+git clone https://github.com/LunarithmAI/FaceLogix.git
 cd FaceLogix
 
 # Copy environment template
