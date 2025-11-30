@@ -171,18 +171,6 @@ FACE_DETECTION_THRESHOLD=0.5
 FACE_RECOGNITION_THRESHOLD=0.75
 ```
 
-## Documentation
-
-Detailed documentation is available in the `llm_docs/` directory:
-
-- [Project Overview](llm_docs/01_PROJECT_OVERVIEW.md)
-- [Database Schema](llm_docs/02_DATABASE_SCHEMA.md)
-- [Backend API](llm_docs/03_BACKEND_API.md)
-- [Face Recognition Service](llm_docs/04_FACE_RECOGNITION_SERVICE.md)
-- [Frontend PWA](llm_docs/05_FRONTEND_PWA.md)
-- [Authentication](llm_docs/06_AUTHENTICATION.md)
-- [Deployment Guide](llm_docs/DEV_DEPLOYMENT_GUIDE.md)
-
 ## Troubleshooting
 
 ### Face Service Models Not Found
