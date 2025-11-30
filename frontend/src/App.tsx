@@ -7,6 +7,8 @@ import { UsersPage } from '@/pages/UsersPage';
 import { DevicesPage } from '@/pages/DevicesPage';
 import { AttendancePage } from '@/pages/AttendancePage';
 import { ReportsPage } from '@/pages/ReportsPage';
+import { SettingsPage } from '@/pages/SettingsPage';
+import { ProfilePage } from '@/pages/ProfilePage';
 import { AppLayout } from '@/components/layout/AppLayout';
 
 interface PrivateRouteProps {
@@ -123,6 +125,22 @@ function App() {
         element={
           <AdminRoute>
             <ReportsPage />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/settings"
+        element={
+          <AdminRoute>
+            <SettingsPage />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/profile"
+        element={
+          <AdminRoute>
+            <ProfilePage />
           </AdminRoute>
         }
       />

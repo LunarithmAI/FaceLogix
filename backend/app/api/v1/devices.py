@@ -231,3 +231,115 @@ async def regenerate_device_secret(
         org_id=device.org_id,
         created_at=device.created_at,
     )
+
+
+@router.post("/{device_id}/activate", response_model=DeviceResponse)
+async def activate_device(
+    device_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """
+    Activate a device.
+    
+    Admin only.
+    """
+    device = await db.get(Device, device_id)
+    
+    if not device or device.org_id != current_user.org_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Device not found",
+        )
+    
+    device.is_active = True
+    await db.commit()
+    await db.refresh(device)
+    
+    return DeviceResponse.model_validate(device)
+
+
+@router.post("/{device_id}/deactivate", response_model=DeviceResponse)
+async def deactivate_device(
+    device_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """
+    Deactivate a device.
+    
+    Admin only.
+    """
+    device = await db.get(Device, device_id)
+    
+    if not device or device.org_id != current_user.org_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Device not found",
+        )
+    
+    device.is_active = False
+    await db.commit()
+    await db.refresh(device)
+    
+    return DeviceResponse.model_validate(device)
+
+
+@router.patch("/{device_id}/settings", response_model=DeviceResponse)
+async def update_device_settings(
+    device_id: UUID,
+    settings: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """
+    Update device settings.
+    
+    Admin only.
+    """
+    device = await db.get(Device, device_id)
+    
+    if not device or device.org_id != current_user.org_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Device not found",
+        )
+    
+    # Merge settings
+    current_settings = device.settings or {}
+    current_settings.update(settings)
+    device.settings = current_settings
+    
+    await db.commit()
+    await db.refresh(device)
+    
+    return DeviceResponse.model_validate(device)
+
+
+@router.post("/{device_id}/heartbeat")
+async def device_heartbeat(
+    device_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """
+    Record device heartbeat/ping.
+    
+    Updates the last_seen_at timestamp.
+    Admin only.
+    """
+    device = await db.get(Device, device_id)
+    
+    if not device or device.org_id != current_user.org_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Device not found",
+        )
+    
+    device.last_seen_at = datetime.utcnow()
+    await db.commit()
+    
+    return {
+        "status": "active" if device.is_active else "inactive",
+        "last_active_at": device.last_seen_at.isoformat(),
+    }

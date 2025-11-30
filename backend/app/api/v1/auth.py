@@ -23,7 +23,9 @@ from app.core.security import (
 from app.models.device import Device
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
+from app.api.deps import get_current_user
 from app.schemas.auth import (
+    ChangePasswordRequest,
     DeviceLoginRequest,
     DeviceLoginResponse,
     LoginRequest,
@@ -31,6 +33,7 @@ from app.schemas.auth import (
     LogoutRequest,
     RefreshRequest,
     RefreshResponse,
+    UserProfileResponse,
 )
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -180,6 +183,59 @@ async def logout(
         await db.commit()
     
     return {"message": "Successfully logged out"}
+
+
+@router.get("/me", response_model=UserProfileResponse)
+async def get_current_user_profile(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get the current authenticated user's profile.
+    
+    Returns user information based on the JWT token.
+    """
+    return UserProfileResponse(
+        id=current_user.id,
+        org_id=current_user.org_id,
+        email=current_user.email,
+        name=current_user.name,
+        role=current_user.role,
+        department=current_user.department,
+        is_active=current_user.is_active,
+        enrolled_at=current_user.enrolled_at,
+        created_at=current_user.created_at,
+    )
+
+
+@router.post("/change-password")
+async def change_password(
+    request: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Change the current user's password.
+    
+    Requires the current password for verification.
+    """
+    # Verify current password
+    if not current_user.password_hash:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User does not have a password set",
+        )
+    
+    if not verify_password(request.current_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
+    
+    # Update password
+    current_user.password_hash = hash_password(request.new_password)
+    await db.commit()
+    
+    return {"message": "Password changed successfully"}
 
 
 @router.post("/devices/login", response_model=DeviceLoginResponse)

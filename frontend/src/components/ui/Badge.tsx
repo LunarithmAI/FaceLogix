@@ -78,14 +78,14 @@ export function StatusBadge({ status }: { status: 'active' | 'inactive' | 'pendi
   );
 }
 
-export function RoleBadge({ role }: { role: 'admin' | 'manager' | 'employee' }) {
+export function RoleBadge({ role }: { role: 'admin' | 'manager' | 'member' }) {
   const config = {
     admin: { variant: 'danger' as const, label: 'Admin' },
     manager: { variant: 'primary' as const, label: 'Manager' },
-    employee: { variant: 'default' as const, label: 'Employee' },
+    member: { variant: 'default' as const, label: 'Member' },
   };
 
-  const { variant, label } = config[role];
+  const { variant, label } = config[role] || { variant: 'default' as const, label: role };
 
   return <Badge variant={variant}>{label}</Badge>;
 }

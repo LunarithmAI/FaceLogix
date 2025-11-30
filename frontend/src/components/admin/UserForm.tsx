@@ -13,12 +13,11 @@ interface UserFormProps {
 export function UserForm({ user, onSubmit, onCancel, isLoading = false }: UserFormProps) {
   const [formData, setFormData] = useState({
     email: user?.email || '',
-    full_name: user?.full_name || '',
+    name: user?.name || '',
     password: '',
-    role: user?.role || 'employee' as UserRole,
-    employee_id: user?.employee_id || '',
+    role: user?.role || 'member' as UserRole,
+    external_id: user?.external_id || '',
     department: user?.department || '',
-    phone: user?.phone || '',
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -29,10 +28,8 @@ export function UserForm({ user, onSubmit, onCancel, isLoading = false }: UserFo
 
     // Validation
     const newErrors: Record<string, string> = {};
-    if (!formData.email) newErrors.email = 'Email is required';
-    if (!formData.full_name) newErrors.full_name = 'Full name is required';
-    if (!user && !formData.password) newErrors.password = 'Password is required';
-    if (!user && formData.password.length < 8) {
+    if (!formData.name) newErrors.name = 'Name is required';
+    if (!user && formData.password && formData.password.length < 8) {
       newErrors.password = 'Password must be at least 8 characters';
     }
 
@@ -45,23 +42,21 @@ export function UserForm({ user, onSubmit, onCancel, isLoading = false }: UserFo
       if (user) {
         // Update - only send changed fields
         const updateData: UpdateUserRequest = {};
-        if (formData.email !== user.email) updateData.email = formData.email;
-        if (formData.full_name !== user.full_name) updateData.full_name = formData.full_name;
+        if (formData.email !== (user.email || '')) updateData.email = formData.email || undefined;
+        if (formData.name !== user.name) updateData.name = formData.name;
         if (formData.role !== user.role) updateData.role = formData.role;
-        if (formData.employee_id !== user.employee_id) updateData.employee_id = formData.employee_id;
-        if (formData.department !== user.department) updateData.department = formData.department;
-        if (formData.phone !== user.phone) updateData.phone = formData.phone;
+        if (formData.external_id !== (user.external_id || '')) updateData.external_id = formData.external_id || undefined;
+        if (formData.department !== (user.department || '')) updateData.department = formData.department || undefined;
         await onSubmit(updateData);
       } else {
         // Create
         await onSubmit({
-          email: formData.email,
-          full_name: formData.full_name,
-          password: formData.password,
+          name: formData.name,
+          email: formData.email || undefined,
+          password: formData.password || undefined,
           role: formData.role,
-          employee_id: formData.employee_id || undefined,
+          external_id: formData.external_id || undefined,
           department: formData.department || undefined,
-          phone: formData.phone || undefined,
         });
       }
     } catch (error) {
@@ -80,10 +75,10 @@ export function UserForm({ user, onSubmit, onCancel, isLoading = false }: UserFo
       )}
 
       <Input
-        label="Full Name"
-        value={formData.full_name}
-        onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-        error={errors.full_name}
+        label="Name"
+        value={formData.name}
+        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+        error={errors.name}
         placeholder="John Doe"
         required
       />
@@ -95,7 +90,6 @@ export function UserForm({ user, onSubmit, onCancel, isLoading = false }: UserFo
         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
         error={errors.email}
         placeholder="john@example.com"
-        required
       />
 
       {!user && (
@@ -105,8 +99,7 @@ export function UserForm({ user, onSubmit, onCancel, isLoading = false }: UserFo
           value={formData.password}
           onChange={(e) => setFormData({ ...formData, password: e.target.value })}
           error={errors.password}
-          placeholder="Minimum 8 characters"
-          required
+          placeholder="Minimum 8 characters (optional)"
         />
       )}
 
@@ -117,16 +110,16 @@ export function UserForm({ user, onSubmit, onCancel, isLoading = false }: UserFo
           onChange={(e) => setFormData({ ...formData, role: e.target.value as UserRole })}
           className="block w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
         >
-          <option value="employee">Employee</option>
+          <option value="member">Member</option>
           <option value="manager">Manager</option>
           <option value="admin">Admin</option>
         </select>
       </div>
 
       <Input
-        label="Employee ID"
-        value={formData.employee_id}
-        onChange={(e) => setFormData({ ...formData, employee_id: e.target.value })}
+        label="External ID"
+        value={formData.external_id}
+        onChange={(e) => setFormData({ ...formData, external_id: e.target.value })}
         placeholder="EMP001"
       />
 
@@ -135,14 +128,6 @@ export function UserForm({ user, onSubmit, onCancel, isLoading = false }: UserFo
         value={formData.department}
         onChange={(e) => setFormData({ ...formData, department: e.target.value })}
         placeholder="Engineering"
-      />
-
-      <Input
-        label="Phone"
-        type="tel"
-        value={formData.phone}
-        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-        placeholder="+1 234 567 8900"
       />
 
       <div className="flex justify-end gap-3 pt-4">

@@ -34,16 +34,16 @@ export function CameraView({
 
   // Expose capture function to parent via callback
   useEffect(() => {
-    if (onCapture && stream && videoRef.current) {
+    if (stream && videoRef.current) {
       const video = videoRef.current;
       
-      const handleCapture = () => {
+      const captureFrame = (): string | null => {
         const canvas = document.createElement('canvas');
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         
         const ctx = canvas.getContext('2d');
-        if (!ctx) return;
+        if (!ctx) return null;
         
         if (facing === 'user') {
           ctx.translate(canvas.width, 0);
@@ -52,14 +52,21 @@ export function CameraView({
         
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         const imageData = canvas.toDataURL('image/jpeg', 0.9);
-        onCapture(imageData);
+        
+        // Call onCapture callback if provided
+        if (onCapture) {
+          onCapture(imageData);
+        }
+        
+        // Also return the image data for direct access
+        return imageData;
       };
 
       // Attach to window for parent access
-      (window as unknown as { captureFrame?: () => void }).captureFrame = handleCapture;
+      (window as unknown as { captureFrame?: () => string | null }).captureFrame = captureFrame;
       
       return () => {
-        delete (window as unknown as { captureFrame?: () => void }).captureFrame;
+        delete (window as unknown as { captureFrame?: () => string | null }).captureFrame;
       };
     }
   }, [onCapture, stream, facing, videoRef]);

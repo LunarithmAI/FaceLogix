@@ -78,3 +78,24 @@ class TokenPayload(BaseModel):
     org: Optional[str] = None  # Organization ID for device tokens
     role: Optional[str] = None
     name: Optional[str] = None
+
+
+class ChangePasswordRequest(BaseModel):
+    """Password change request."""
+    
+    current_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=8)
+
+
+class UserProfileResponse(BaseModel):
+    """Current user profile response."""
+    
+    id: UUID
+    org_id: UUID
+    email: Optional[str]
+    name: str
+    role: str
+    department: Optional[str]
+    is_active: bool
+    enrolled_at: Optional[datetime]
+    created_at: datetime

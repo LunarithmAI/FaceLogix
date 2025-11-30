@@ -432,3 +432,236 @@ async def get_user_summary(
         },
         "average_check_in_time": avg_check_in_time,
     }
+
+
+# Alias for frontend compatibility
+@router.get("/users/{user_id}/stats")
+async def get_user_stats(
+    user_id: UUID,
+    from_date: Optional[date] = Query(None, description="Start date"),
+    to_date: Optional[date] = Query(None, description="End date"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """
+    Get attendance statistics for a user.
+    Alias for /summary/user/{user_id} for frontend compatibility.
+    
+    Admin only.
+    """
+    # Default to last 30 days if not specified
+    if not to_date:
+        to_date = date.today()
+    if not from_date:
+        from_date = to_date - timedelta(days=30)
+    
+    return await get_user_summary(user_id, from_date, to_date, db, current_user)
+
+
+@router.get("/daily-summaries")
+async def get_daily_summaries(
+    start_date: date = Query(..., description="Start date"),
+    end_date: date = Query(..., description="End date"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """
+    Get daily summaries for a date range.
+    
+    Admin only.
+    """
+    org_id = current_user.org_id
+    
+    # Get total active users
+    total_users_result = await db.execute(
+        select(func.count(User.id)).where(
+            and_(
+                User.org_id == org_id,
+                User.is_active == True,
+            )
+        )
+    )
+    total_users = total_users_result.scalar() or 0
+    
+    # Generate daily summaries
+    summaries = []
+    current_date = start_date
+    
+    while current_date <= end_date:
+        start = datetime.combine(current_date, time.min)
+        end = datetime.combine(current_date, time.max)
+        
+        # Get status counts for the day
+        status_counts_result = await db.execute(
+            select(
+                AttendanceLog.status,
+                func.count(func.distinct(AttendanceLog.user_id)),
+            )
+            .where(
+                and_(
+                    AttendanceLog.org_id == org_id,
+                    AttendanceLog.type == "check_in",
+                    AttendanceLog.ts >= start,
+                    AttendanceLog.ts <= end,
+                )
+            )
+            .group_by(AttendanceLog.status)
+        )
+        
+        counts = {row[0]: row[1] for row in status_counts_result.fetchall()}
+        
+        on_time = counts.get("on_time", 0)
+        late = counts.get("late", 0)
+        unknown_attempts = counts.get("unknown_user", 0)
+        checked_in = on_time + late
+        absent = max(0, total_users - checked_in)
+        
+        summaries.append(
+            DailySummary(
+                date=current_date,
+                total_users=total_users,
+                checked_in=checked_in,
+                on_time=on_time,
+                late=late,
+                absent=absent,
+                unknown_attempts=unknown_attempts,
+            ).model_dump()
+        )
+        
+        current_date += timedelta(days=1)
+    
+    return summaries
+
+
+@router.get("/export")
+async def export_report(
+    start_date: date = Query(..., description="Start date"),
+    end_date: date = Query(..., description="End date"),
+    user_id: Optional[UUID] = Query(None, description="Filter by user ID"),
+    format: str = Query("csv", description="Export format (csv, xlsx, pdf)"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """
+    Export attendance report in various formats.
+    Currently supports CSV.
+    
+    Admin only.
+    """
+    # Delegate to CSV export - other formats can be added later
+    return await export_attendance_csv(start_date, end_date, user_id, db, current_user)
+
+
+@router.get("/weekly-trend")
+async def get_weekly_trend(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """
+    Get weekly attendance trend for the last 7 days.
+    
+    Admin only.
+    """
+    org_id = current_user.org_id
+    today = date.today()
+    
+    trends = []
+    
+    for day_offset in range(6, -1, -1):
+        current_date = today - timedelta(days=day_offset)
+        start = datetime.combine(current_date, time.min)
+        end = datetime.combine(current_date, time.max)
+        
+        # Get check-in count
+        check_in_result = await db.execute(
+            select(func.count(func.distinct(AttendanceLog.user_id))).where(
+                and_(
+                    AttendanceLog.org_id == org_id,
+                    AttendanceLog.type == "check_in",
+                    AttendanceLog.status.in_(["on_time", "late"]),
+                    AttendanceLog.ts >= start,
+                    AttendanceLog.ts <= end,
+                )
+            )
+        )
+        check_ins = check_in_result.scalar() or 0
+        
+        # Get check-out count
+        check_out_result = await db.execute(
+            select(func.count(func.distinct(AttendanceLog.user_id))).where(
+                and_(
+                    AttendanceLog.org_id == org_id,
+                    AttendanceLog.type == "check_out",
+                    AttendanceLog.ts >= start,
+                    AttendanceLog.ts <= end,
+                )
+            )
+        )
+        check_outs = check_out_result.scalar() or 0
+        
+        trends.append({
+            "date": current_date.isoformat(),
+            "check_ins": check_ins,
+            "check_outs": check_outs,
+        })
+    
+    return trends
+
+
+@router.get("/department-summary")
+async def get_department_summary(
+    target_date: Optional[date] = Query(None, description="Date for summary (defaults to today)"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """
+    Get department-wise attendance summary.
+    
+    Admin only.
+    """
+    org_id = current_user.org_id
+    summary_date = target_date or date.today()
+    start = datetime.combine(summary_date, time.min)
+    end = datetime.combine(summary_date, time.max)
+    
+    # Get all departments in org
+    departments_result = await db.execute(
+        select(User.department, func.count(User.id))
+        .where(
+            and_(
+                User.org_id == org_id,
+                User.is_active == True,
+            )
+        )
+        .group_by(User.department)
+    )
+    department_counts = {row[0] or "Unassigned": row[1] for row in departments_result.fetchall()}
+    
+    # Get present count per department
+    present_result = await db.execute(
+        select(User.department, func.count(func.distinct(AttendanceLog.user_id)))
+        .join(AttendanceLog, AttendanceLog.user_id == User.id)
+        .where(
+            and_(
+                AttendanceLog.org_id == org_id,
+                AttendanceLog.type == "check_in",
+                AttendanceLog.status.in_(["on_time", "late"]),
+                AttendanceLog.ts >= start,
+                AttendanceLog.ts <= end,
+            )
+        )
+        .group_by(User.department)
+    )
+    present_counts = {row[0] or "Unassigned": row[1] for row in present_result.fetchall()}
+    
+    # Build summary
+    summaries = []
+    for dept, total in department_counts.items():
+        present = present_counts.get(dept, 0)
+        summaries.append({
+            "department": dept,
+            "present": present,
+            "absent": max(0, total - present),
+        })
+    
+    return summaries

@@ -26,6 +26,7 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const isMountedRef = useRef(true);
   
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -33,15 +34,27 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
   const [facing, setFacing] = useState<CameraFacing>(initialFacing);
   const [hasMultipleCameras, setHasMultipleCameras] = useState(false);
 
+  // Track mounted state
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   // Check for multiple cameras on mount
   useEffect(() => {
     const checkCameras = async () => {
       try {
         const devices = await navigator.mediaDevices.enumerateDevices();
         const videoDevices = devices.filter(d => d.kind === 'videoinput');
-        setHasMultipleCameras(videoDevices.length > 1);
+        if (isMountedRef.current) {
+          setHasMultipleCameras(videoDevices.length > 1);
+        }
       } catch {
-        setHasMultipleCameras(false);
+        if (isMountedRef.current) {
+          setHasMultipleCameras(false);
+        }
       }
     };
     checkCameras();
@@ -51,7 +64,9 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
-      setStream(null);
+      if (isMountedRef.current) {
+        setStream(null);
+      }
     }
     if (videoRef.current) {
       videoRef.current.srcObject = null;
@@ -59,6 +74,8 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
   }, []);
 
   const startCamera = useCallback(async () => {
+    if (!isMountedRef.current) return;
+    
     setIsLoading(true);
     setError(null);
     
@@ -76,14 +93,33 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
       };
 
       const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+      
+      // Check if component is still mounted after async operation
+      if (!isMountedRef.current) {
+        mediaStream.getTracks().forEach(track => track.stop());
+        return;
+      }
+      
       streamRef.current = mediaStream;
       setStream(mediaStream);
 
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
-        await videoRef.current.play();
+        try {
+          await videoRef.current.play();
+        } catch (playError) {
+          // Ignore AbortError - happens when component unmounts during play
+          if (playError instanceof Error && playError.name === 'AbortError') {
+            console.log('Video play aborted - component likely unmounted');
+            return;
+          }
+          throw playError;
+        }
       }
     } catch (err) {
+      // Don't set error state if unmounted
+      if (!isMountedRef.current) return;
+      
       const message = err instanceof Error ? err.message : 'Failed to access camera';
       if (message.includes('NotAllowedError') || message.includes('Permission')) {
         setError('Camera permission denied. Please allow camera access.');
@@ -93,7 +129,9 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
         setError(message);
       }
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [facing, width, height, stopCamera]);
 
@@ -130,6 +168,8 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
     
     // Restart camera with new facing mode
     if (stream) {
+      if (!isMountedRef.current) return;
+      
       setIsLoading(true);
       stopCamera();
       
@@ -144,18 +184,35 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
         };
 
         const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+        
+        // Check if component is still mounted
+        if (!isMountedRef.current) {
+          mediaStream.getTracks().forEach(track => track.stop());
+          return;
+        }
+        
         streamRef.current = mediaStream;
         setStream(mediaStream);
 
         if (videoRef.current) {
           videoRef.current.srcObject = mediaStream;
-          await videoRef.current.play();
+          try {
+            await videoRef.current.play();
+          } catch (playError) {
+            if (playError instanceof Error && playError.name === 'AbortError') {
+              return;
+            }
+            throw playError;
+          }
         }
       } catch (err) {
+        if (!isMountedRef.current) return;
         const message = err instanceof Error ? err.message : 'Failed to switch camera';
         setError(message);
       } finally {
-        setIsLoading(false);
+        if (isMountedRef.current) {
+          setIsLoading(false);
+        }
       }
     }
   }, [facing, stream, width, height, stopCamera]);

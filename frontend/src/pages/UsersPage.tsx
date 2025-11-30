@@ -27,7 +27,7 @@ export function UsersPage() {
   const loadUsers = useCallback(async () => {
     try {
       setIsLoading(true);
-      const data = await usersApi.list({ page, search, limit: 10 });
+      const data = await usersApi.list({ page, search, page_size: 10 });
       setUsers(data);
     } catch (error) {
       console.error('Failed to load users:', error);
@@ -191,7 +191,7 @@ export function UsersPage() {
         onClose={() => setIsDeleteOpen(false)}
         onConfirm={handleConfirmDelete}
         title="Delete User"
-        message={`Are you sure you want to delete ${selectedUser?.full_name}? This action cannot be undone.`}
+        message={`Are you sure you want to delete ${selectedUser?.name}? This action cannot be undone.`}
         confirmText="Delete"
         variant="danger"
         isLoading={isSubmitting}

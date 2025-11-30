@@ -28,12 +28,19 @@ export function EnrollmentModal({
   const [success, setSuccess] = useState(false);
 
   const handleCapture = useCallback(() => {
-    const captureFrame = (window as Window & { captureFrame?: () => string }).captureFrame;
-    if (!captureFrame) return;
+    const captureFrame = (window as Window & { captureFrame?: () => string | null }).captureFrame;
+    if (!captureFrame) {
+      setError('Camera not ready. Please wait a moment and try again.');
+      return;
+    }
 
     const imageData = captureFrame();
-    if (!imageData) return;
+    if (!imageData) {
+      setError('Failed to capture image. Please try again.');
+      return;
+    }
 
+    setError(null);
     setCaptures((prev) => [...prev, imageData].slice(0, MAX_CAPTURES));
   }, []);
 
@@ -81,7 +88,7 @@ export function EnrollmentModal({
             Face Enrolled Successfully
           </h3>
           <p className="text-gray-500">
-            {user.full_name}'s face has been enrolled with {captures.length} images.
+            {user.name}'s face has been enrolled with {captures.length} images.
           </p>
           <Button onClick={handleClose} className="mt-6">
             Close
@@ -91,7 +98,7 @@ export function EnrollmentModal({
         <>
           <div className="mb-4">
             <p className="text-sm text-gray-600">
-              Enrolling face for <strong>{user.full_name}</strong>
+              Enrolling face for <strong>{user.name}</strong>
             </p>
             <p className="text-sm text-gray-500 mt-1">
               Capture {MIN_CAPTURES}-{MAX_CAPTURES} photos from different angles for best results.

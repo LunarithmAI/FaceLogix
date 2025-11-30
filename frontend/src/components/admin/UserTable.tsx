@@ -76,14 +76,14 @@ export function UserTable({
                 <div className="flex items-center">
                   <div className="w-10 h-10 flex-shrink-0 bg-primary-100 rounded-full flex items-center justify-center">
                     <span className="text-sm font-medium text-primary-700">
-                      {user.full_name.charAt(0)}
+                      {user.name.charAt(0).toUpperCase()}
                     </span>
                   </div>
                   <div className="ml-4">
                     <div className="text-sm font-medium text-gray-900">
-                      {user.full_name}
+                      {user.name}
                     </div>
-                    <div className="text-sm text-gray-500">{user.email}</div>
+                    <div className="text-sm text-gray-500">{user.email || 'No email'}</div>
                   </div>
                 </div>
               </td>
@@ -94,7 +94,7 @@ export function UserTable({
                 <StatusBadge status={user.is_active ? 'active' : 'inactive'} />
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
-                {user.has_face_enrolled ? (
+                {user.enrolled_at ? (
                   <Badge variant="success" dot>
                     Enrolled
                   </Badge>
@@ -105,7 +105,7 @@ export function UserTable({
                 )}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {user.last_check_in ? formatSmartDate(user.last_check_in) : 'Never'}
+                {user.enrolled_at ? formatSmartDate(user.enrolled_at) : 'Never'}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                 <div className="relative">
@@ -141,7 +141,7 @@ export function UserTable({
                           className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                         >
                           <FaceSmileIcon className="w-4 h-4 mr-3" />
-                          {user.has_face_enrolled ? 'Re-enroll Face' : 'Enroll Face'}
+                          {user.enrolled_at ? 'Re-enroll Face' : 'Enroll Face'}
                         </button>
                         <div className="border-t border-gray-100 my-1" />
                         <button

@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,7 +18,15 @@ from app.core.security import hash_password
 from app.models.face_embedding import FaceEmbedding
 from app.models.user import User
 from app.schemas.common import PaginatedResponse
-from app.schemas.user import UserCreate, UserEnrollResponse, UserResponse, UserUpdate
+from app.schemas.user import (
+    FaceEnrollmentRequest,
+    FaceStatusResponse,
+    ResetPasswordRequest,
+    UserCreate,
+    UserEnrollResponse,
+    UserResponse,
+    UserUpdate,
+)
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -262,31 +270,23 @@ async def delete_user(
 @router.post("/{user_id}/enroll", response_model=UserEnrollResponse)
 async def enroll_user_face(
     user_id: UUID,
-    images: List[UploadFile] = File(..., description="Face images for enrollment (1-5)"),
+    request: FaceEnrollmentRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
     """
     Enroll face embeddings for a user.
     
-    Accepts 1-5 face images for enrollment. The images are processed through
-    the face service to generate embeddings which are stored for recognition.
+    Accepts 1-5 base64 encoded face images for enrollment. The images are processed 
+    through the face service to generate embeddings which are stored for recognition.
+    
+    Request body:
+    {
+        "images": ["data:image/jpeg;base64,...", "data:image/jpeg;base64,..."]
+    }
     
     Admin only.
     """
-    # Validate image count
-    if len(images) < 1:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="At least 1 image is required",
-        )
-    
-    if len(images) > 5:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Maximum 5 images allowed",
-        )
-    
     # Verify user exists and belongs to org
     user = await db.get(User, user_id)
     
@@ -302,19 +302,26 @@ async def enroll_user_face(
             detail="Cannot enroll inactive user",
         )
     
+    # Decode base64 images to bytes
+    try:
+        image_bytes_list = request.get_image_bytes_list()
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    
     # Process images through face service
     import httpx
     
     embeddings_stored = 0
     
     async with httpx.AsyncClient(timeout=settings.FACE_SERVICE_TIMEOUT) as client:
-        for idx, image in enumerate(images):
-            content = await image.read()
-            
+        for idx, content in enumerate(image_bytes_list):
             try:
                 response = await client.post(
                     f"{settings.FACE_SERVICE_URL}/api/v1/embed",
-                    files={"image": (image.filename or "face.jpg", content, image.content_type or "image/jpeg")},
+                    files={"image": ("face.jpg", content, "image/jpeg")},
                 )
                 
                 if response.status_code == 200:
@@ -359,3 +366,170 @@ async def enroll_user_face(
         embeddings_count=embeddings_stored,
         enrolled_at=user.enrolled_at,
     )
+
+
+# Alias for frontend compatibility - same as /enroll
+@router.post("/{user_id}/enroll-face", response_model=UserEnrollResponse)
+async def enroll_user_face_alias(
+    user_id: UUID,
+    request: FaceEnrollmentRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """
+    Alias for /enroll endpoint for frontend compatibility.
+    
+    Request body:
+    {
+        "images": ["data:image/jpeg;base64,...", "data:image/jpeg;base64,..."]
+    }
+    """
+    return await enroll_user_face(user_id, request, db, current_user)
+
+
+@router.get("/{user_id}/face-status", response_model=FaceStatusResponse)
+async def get_face_status(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """
+    Get face enrollment status for a user.
+    
+    Returns whether the user has face embeddings and the count.
+    Admin only.
+    """
+    user = await db.get(User, user_id)
+    
+    if not user or user.org_id != current_user.org_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    
+    # Count embeddings
+    result = await db.execute(
+        select(func.count(FaceEmbedding.id)).where(FaceEmbedding.user_id == user_id)
+    )
+    embeddings_count = result.scalar() or 0
+    
+    return FaceStatusResponse(
+        has_face=embeddings_count > 0,
+        embeddings_count=embeddings_count,
+        enrolled_at=user.enrolled_at,
+    )
+
+
+@router.delete("/{user_id}/face-embeddings", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_face_embeddings(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """
+    Delete all face embeddings for a user.
+    
+    Admin only.
+    """
+    user = await db.get(User, user_id)
+    
+    if not user or user.org_id != current_user.org_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    
+    # Delete all embeddings for this user
+    from sqlalchemy import delete
+    await db.execute(
+        delete(FaceEmbedding).where(FaceEmbedding.user_id == user_id)
+    )
+    
+    # Clear enrollment timestamp
+    user.enrolled_at = None
+    await db.commit()
+
+
+@router.post("/{user_id}/activate", response_model=UserResponse)
+async def activate_user(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """
+    Activate a user account.
+    
+    Admin only.
+    """
+    user = await db.get(User, user_id)
+    
+    if not user or user.org_id != current_user.org_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    
+    user.is_active = True
+    await db.commit()
+    await db.refresh(user)
+    
+    return UserResponse.model_validate(user)
+
+
+@router.post("/{user_id}/deactivate", response_model=UserResponse)
+async def deactivate_user(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """
+    Deactivate a user account.
+    
+    Admin only.
+    """
+    user = await db.get(User, user_id)
+    
+    if not user or user.org_id != current_user.org_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    
+    # Prevent deactivating self
+    if user.id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot deactivate your own account",
+        )
+    
+    user.is_active = False
+    await db.commit()
+    await db.refresh(user)
+    
+    return UserResponse.model_validate(user)
+
+
+@router.post("/{user_id}/reset-password")
+async def reset_user_password(
+    user_id: UUID,
+    request: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """
+    Reset a user's password (admin action).
+    
+    Admin only.
+    """
+    user = await db.get(User, user_id)
+    
+    if not user or user.org_id != current_user.org_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    
+    user.password_hash = hash_password(request.new_password)
+    await db.commit()
+    
+    return {"message": "Password reset successfully"}

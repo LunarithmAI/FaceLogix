@@ -9,7 +9,7 @@ from typing import List, Optional
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import and_, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +21,7 @@ from app.models.org import Org
 from app.models.user import User
 from app.schemas.attendance import (
     AttendanceLogResponse,
+    CheckInRequest,
     CheckInResponse,
     DailySummary,
 )
@@ -92,8 +93,7 @@ def calculate_check_in_status(org: Org, check_time: datetime) -> str:
 
 @router.post("/check-in", response_model=CheckInResponse)
 async def check_in(
-    image: UploadFile = File(..., description="Face image for recognition"),
-    device_id: Optional[UUID] = Form(None, description="Device ID if checking in from device"),
+    request: CheckInRequest,
     db: AsyncSession = Depends(get_db),
     identity: dict = Depends(get_current_identity),
 ):
@@ -103,17 +103,29 @@ async def check_in(
     The image is processed through the face service to generate an embedding,
     which is then matched against enrolled users in the organization.
     
+    Accepts JSON body with base64-encoded image:
+    {
+        "image": "data:image/jpeg;base64,..." or raw base64 string,
+        "device_id": "optional-uuid"
+    }
+    
     Can be called with either user token or device token.
     """
-    # Read image content
-    content = await image.read()
+    # Decode base64 image to bytes
+    try:
+        content = request.get_image_bytes()
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
     
     # Get embedding from face service
     try:
         async with httpx.AsyncClient(timeout=settings.FACE_SERVICE_TIMEOUT) as client:
             response = await client.post(
                 f"{settings.FACE_SERVICE_URL}/api/v1/embed",
-                files={"image": (image.filename or "face.jpg", content, image.content_type or "image/jpeg")},
+                files={"image": ("face.jpg", content, "image/jpeg")},
             )
             
             if response.status_code == 400:
@@ -148,7 +160,7 @@ async def check_in(
     quality_score = embedding_result.get("quality_score", 1.0)
     
     # Determine effective device_id
-    effective_device_id = device_id
+    effective_device_id = request.device_id
     if identity["type"] == "device":
         effective_device_id = UUID(identity["sub"])
     
@@ -259,8 +271,7 @@ async def check_in(
 
 @router.post("/check-out", response_model=CheckInResponse)
 async def check_out(
-    image: UploadFile = File(..., description="Face image for recognition"),
-    device_id: Optional[UUID] = Form(None, description="Device ID if checking out from device"),
+    request: CheckInRequest,
     db: AsyncSession = Depends(get_db),
     identity: dict = Depends(get_current_identity),
 ):
@@ -268,16 +279,28 @@ async def check_out(
     Process check-out request with face recognition.
     
     Similar to check-in but records a check-out event.
+    
+    Accepts JSON body with base64-encoded image:
+    {
+        "image": "data:image/jpeg;base64,..." or raw base64 string,
+        "device_id": "optional-uuid"
+    }
     """
-    # Read image content
-    content = await image.read()
+    # Decode base64 image to bytes
+    try:
+        content = request.get_image_bytes()
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
     
     # Get embedding from face service
     try:
         async with httpx.AsyncClient(timeout=settings.FACE_SERVICE_TIMEOUT) as client:
             response = await client.post(
                 f"{settings.FACE_SERVICE_URL}/api/v1/embed",
-                files={"image": (image.filename or "face.jpg", content, image.content_type or "image/jpeg")},
+                files={"image": ("face.jpg", content, "image/jpeg")},
             )
             
             if response.status_code == 400:
@@ -310,7 +333,7 @@ async def check_out(
     embedding = embedding_result.get("embedding")
     
     # Determine effective device_id
-    effective_device_id = device_id
+    effective_device_id = request.device_id
     if identity["type"] == "device":
         effective_device_id = UUID(identity["sub"])
     
@@ -549,4 +572,194 @@ async def get_daily_summary(
         late=late,
         absent=absent,
         unknown_attempts=unknown_attempts,
+    )
+
+
+@router.get("/stats")
+async def get_attendance_stats(
+    user_id: Optional[UUID] = Query(None, description="User ID for stats (admin can view any)"),
+    db: AsyncSession = Depends(get_db),
+    identity: dict = Depends(get_current_identity),
+):
+    """
+    Get attendance statistics.
+    
+    Admins can view stats for any user.
+    Members can only view their own stats.
+    """
+    org_id = UUID(identity["org_id"])
+    
+    # Determine which user's stats to fetch
+    if identity.get("role") in ("admin", "super_admin"):
+        target_user_id = user_id
+    else:
+        target_user_id = UUID(identity["sub"])
+    
+    # Default date range: last 30 days
+    today = date.today()
+    from_date = today - timedelta(days=30)
+    to_date = today
+    
+    # Calculate working days in range
+    working_days = 0
+    current = from_date
+    while current <= to_date:
+        if current.weekday() < 5:  # Monday to Friday
+            working_days += 1
+        current += timedelta(days=1)
+    
+    # Base query conditions
+    base_conditions = [
+        AttendanceLog.org_id == org_id,
+        AttendanceLog.type == "check_in",
+        AttendanceLog.ts >= datetime.combine(from_date, time.min),
+        AttendanceLog.ts <= datetime.combine(to_date, time.max),
+    ]
+    
+    if target_user_id:
+        base_conditions.append(AttendanceLog.user_id == target_user_id)
+        base_conditions.append(AttendanceLog.status.in_(["on_time", "late"]))
+    
+    # Get attendance counts by status
+    status_counts_result = await db.execute(
+        select(
+            AttendanceLog.status,
+            func.count(AttendanceLog.id),
+        )
+        .where(and_(*base_conditions))
+        .group_by(AttendanceLog.status)
+    )
+    
+    counts = {row[0]: row[1] for row in status_counts_result.fetchall()}
+    
+    on_time = counts.get("on_time", 0)
+    late = counts.get("late", 0)
+    total_check_ins = on_time + late
+    absent = max(0, working_days - total_check_ins)
+    
+    # Calculate rates
+    attendance_rate = (total_check_ins / working_days * 100) if working_days > 0 else 0
+    punctuality_rate = (on_time / total_check_ins * 100) if total_check_ins > 0 else 0
+    
+    return {
+        "period": {
+            "from_date": from_date.isoformat(),
+            "to_date": to_date.isoformat(),
+            "working_days": working_days,
+        },
+        "summary": {
+            "on_time": on_time,
+            "late": late,
+            "absent": absent,
+            "total_check_ins": total_check_ins,
+        },
+        "rates": {
+            "attendance_rate": round(attendance_rate, 2),
+            "punctuality_rate": round(punctuality_rate, 2),
+        },
+    }
+
+
+@router.get("/me", response_model=PaginatedResponse[AttendanceLogResponse])
+async def get_my_attendance(
+    from_date: Optional[date] = Query(None, description="Start date filter"),
+    to_date: Optional[date] = Query(None, description="End date filter"),
+    attendance_status: Optional[str] = Query(None, alias="status", description="Filter by status"),
+    attendance_type: Optional[str] = Query(None, alias="type", description="Filter by type"),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(50, ge=1, le=100, description="Items per page"),
+    db: AsyncSession = Depends(get_db),
+    identity: dict = Depends(get_current_identity),
+):
+    """
+    Get current user's attendance logs.
+    """
+    if identity.get("type") != "user":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User authentication required",
+        )
+    
+    user_id = UUID(identity["sub"])
+    org_id = UUID(identity["org_id"])
+    
+    # Build query
+    query = (
+        select(
+            AttendanceLog,
+            User.name.label("user_name"),
+            Device.name.label("device_name"),
+        )
+        .outerjoin(User, AttendanceLog.user_id == User.id)
+        .outerjoin(Device, AttendanceLog.device_id == Device.id)
+        .where(
+            and_(
+                AttendanceLog.org_id == org_id,
+                AttendanceLog.user_id == user_id,
+            )
+        )
+    )
+    
+    count_query = select(func.count(AttendanceLog.id)).where(
+        and_(
+            AttendanceLog.org_id == org_id,
+            AttendanceLog.user_id == user_id,
+        )
+    )
+    
+    # Apply filters
+    if from_date:
+        from_datetime = datetime.combine(from_date, time.min)
+        query = query.where(AttendanceLog.ts >= from_datetime)
+        count_query = count_query.where(AttendanceLog.ts >= from_datetime)
+    
+    if to_date:
+        to_datetime = datetime.combine(to_date, time.max)
+        query = query.where(AttendanceLog.ts <= to_datetime)
+        count_query = count_query.where(AttendanceLog.ts <= to_datetime)
+    
+    if attendance_status:
+        query = query.where(AttendanceLog.status == attendance_status)
+        count_query = count_query.where(AttendanceLog.status == attendance_status)
+    
+    if attendance_type:
+        query = query.where(AttendanceLog.type == attendance_type)
+        count_query = count_query.where(AttendanceLog.type == attendance_type)
+    
+    # Get total count
+    total_result = await db.execute(count_query)
+    total = total_result.scalar()
+    
+    # Calculate pagination
+    pages = (total + page_size - 1) // page_size if total > 0 else 1
+    offset = (page - 1) * page_size
+    
+    # Execute query with pagination
+    query = query.order_by(AttendanceLog.ts.desc()).offset(offset).limit(page_size)
+    result = await db.execute(query)
+    rows = result.all()
+    
+    items = []
+    for row in rows:
+        log = row[0]
+        items.append(
+            AttendanceLogResponse(
+                id=log.id,
+                user_id=log.user_id,
+                user_name=row[1],
+                device_id=log.device_id,
+                device_name=row[2],
+                ts=log.ts,
+                type=log.type,
+                status=log.status,
+                confidence_score=log.confidence_score,
+            )
+        )
+    
+    return PaginatedResponse(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        pages=pages,
     )
