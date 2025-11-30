@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
 import { useAuthStore } from '@/stores/authStore';
 

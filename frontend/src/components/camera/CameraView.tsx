@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { ArrowPathRoundedSquareIcon } from '@heroicons/react/24/outline';
 import { useCamera } from '@/hooks/useCamera';
 
@@ -19,12 +19,25 @@ export function CameraView({
     videoRef,
     stream,
     isLoading,
+    isReady,
     error,
     facing,
     hasMultipleCameras,
     startCamera,
     switchCamera,
   } = useCamera();
+  
+  const onCaptureRef = useRef(onCapture);
+  const facingRef = useRef(facing);
+  
+  // Keep refs updated
+  useEffect(() => {
+    onCaptureRef.current = onCapture;
+  }, [onCapture]);
+  
+  useEffect(() => {
+    facingRef.current = facing;
+  }, [facing]);
 
   useEffect(() => {
     if (autoStart) {
@@ -32,44 +45,55 @@ export function CameraView({
     }
   }, [autoStart, startCamera]);
 
-  // Expose capture function to parent via callback
-  useEffect(() => {
-    if (stream && videoRef.current) {
-      const video = videoRef.current;
-      
-      const captureFrame = (): string | null => {
-        const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return null;
-        
-        if (facing === 'user') {
-          ctx.translate(canvas.width, 0);
-          ctx.scale(-1, 1);
-        }
-        
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const imageData = canvas.toDataURL('image/jpeg', 0.9);
-        
-        // Call onCapture callback if provided
-        if (onCapture) {
-          onCapture(imageData);
-        }
-        
-        // Also return the image data for direct access
-        return imageData;
-      };
-
-      // Attach to window for parent access
-      (window as unknown as { captureFrame?: () => string | null }).captureFrame = captureFrame;
-      
-      return () => {
-        delete (window as unknown as { captureFrame?: () => string | null }).captureFrame;
-      };
+  // Create stable capture function
+  const captureFrame = useCallback((): string | null => {
+    const video = videoRef.current;
+    if (!video || !stream) return null;
+    
+    // Wait for video to have valid dimensions
+    if (video.videoWidth === 0 || video.videoHeight === 0) {
+      console.warn('Video dimensions not ready');
+      return null;
     }
-  }, [onCapture, stream, facing, videoRef]);
+    
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    
+    if (facingRef.current === 'user') {
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+    }
+    
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const imageData = canvas.toDataURL('image/jpeg', 0.9);
+    
+    return imageData;
+  }, [stream, videoRef]);
+
+  // Attach capture function to window and continuously update parent
+  useEffect(() => {
+    if (!isReady || !videoRef.current) return;
+    
+    // Attach to window for direct access
+    (window as unknown as { captureFrame?: () => string | null }).captureFrame = captureFrame;
+    
+    // Continuously send frames to parent (every 500ms)
+    const intervalId = setInterval(() => {
+      const imageData = captureFrame();
+      if (imageData && onCaptureRef.current) {
+        onCaptureRef.current(imageData);
+      }
+    }, 500);
+    
+    return () => {
+      clearInterval(intervalId);
+      delete (window as unknown as { captureFrame?: () => string | null }).captureFrame;
+    };
+  }, [isReady, captureFrame, videoRef]);
 
   if (error) {
     return (
@@ -108,14 +132,14 @@ export function CameraView({
       )}
 
       {/* Face guide overlay */}
-      {showGuide && stream && !isLoading && (
+      {showGuide && isReady && !isLoading && (
         <div className="face-guide">
           <div className="face-guide-oval" />
         </div>
       )}
 
       {/* Instruction text */}
-      {stream && !isLoading && (
+      {isReady && !isLoading && (
         <div className="absolute bottom-4 left-0 right-0 text-center">
           <p className="text-white text-sm bg-black/50 inline-block px-4 py-2 rounded-full">
             Position your face within the oval
@@ -124,7 +148,7 @@ export function CameraView({
       )}
 
       {/* Camera switch button */}
-      {hasMultipleCameras && stream && (
+      {hasMultipleCameras && isReady && (
         <button
           onClick={switchCamera}
           disabled={isLoading}

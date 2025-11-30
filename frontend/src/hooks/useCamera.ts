@@ -9,9 +9,10 @@ interface UseCameraOptions {
 }
 
 interface UseCameraReturn {
-  videoRef: React.RefObject<HTMLVideoElement>;
+  videoRef: React.RefObject<HTMLVideoElement | null>;
   stream: MediaStream | null;
   isLoading: boolean;
+  isReady: boolean;
   error: string | null;
   facing: CameraFacing;
   hasMultipleCameras: boolean;
@@ -30,6 +31,7 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
   
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [facing, setFacing] = useState<CameraFacing>(initialFacing);
   const [hasMultipleCameras, setHasMultipleCameras] = useState(false);
@@ -66,6 +68,7 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
       streamRef.current = null;
       if (isMountedRef.current) {
         setStream(null);
+        setIsReady(false);
       }
     }
     if (videoRef.current) {
@@ -75,6 +78,12 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
 
   const startCamera = useCallback(async () => {
     if (!isMountedRef.current) return;
+    
+    // Check if mediaDevices is available (requires HTTPS on non-localhost)
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError('Camera access requires HTTPS. Please use a secure connection.');
+      return;
+    }
     
     setIsLoading(true);
     setError(null);
@@ -104,9 +113,36 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
       setStream(mediaStream);
 
       if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
+        const video = videoRef.current;
+        video.srcObject = mediaStream;
+        
+        // Wait for video metadata to load (important for iOS)
+        await new Promise<void>((resolve, reject) => {
+          const onLoadedMetadata = () => {
+            video.removeEventListener('loadedmetadata', onLoadedMetadata);
+            video.removeEventListener('error', onError);
+            resolve();
+          };
+          const onError = () => {
+            video.removeEventListener('loadedmetadata', onLoadedMetadata);
+            video.removeEventListener('error', onError);
+            reject(new Error('Video failed to load'));
+          };
+          
+          // If already loaded, resolve immediately
+          if (video.readyState >= 1) {
+            resolve();
+          } else {
+            video.addEventListener('loadedmetadata', onLoadedMetadata);
+            video.addEventListener('error', onError);
+          }
+        });
+        
         try {
-          await videoRef.current.play();
+          await video.play();
+          if (isMountedRef.current) {
+            setIsReady(true);
+          }
         } catch (playError) {
           // Ignore AbortError - happens when component unmounts during play
           if (playError instanceof Error && playError.name === 'AbortError') {
@@ -228,6 +264,7 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
     videoRef,
     stream,
     isLoading,
+    isReady,
     error,
     facing,
     hasMultipleCameras,

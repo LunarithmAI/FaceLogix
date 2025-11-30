@@ -110,21 +110,27 @@ export function AttendanceList({
               )}
               <td className="px-6 py-4 whitespace-nowrap">
                 <div className="flex items-center">
-                  <div className="w-16 h-2 bg-gray-200 rounded-full mr-2">
-                    <div
-                      className={`h-2 rounded-full ${
-                        log.confidence > 0.9
-                          ? 'bg-green-500'
-                          : log.confidence > 0.7
-                            ? 'bg-yellow-500'
-                            : 'bg-red-500'
-                      }`}
-                      style={{ width: `${log.confidence * 100}%` }}
-                    />
-                  </div>
-                  <span className="text-sm text-gray-600">
-                    {Math.round(log.confidence * 100)}%
-                  </span>
+                  {typeof log.confidence === 'number' && log.confidence > 0 ? (
+                    <>
+                      <div className="w-16 h-2 bg-gray-200 rounded-full mr-2">
+                        <div
+                          className={`h-2 rounded-full ${
+                            log.confidence > 0.9
+                              ? 'bg-green-500'
+                              : log.confidence > 0.7
+                                ? 'bg-yellow-500'
+                                : 'bg-red-500'
+                          }`}
+                          style={{ width: `${log.confidence * 100}%` }}
+                        />
+                      </div>
+                      <span className="text-sm text-gray-600">
+                        {Math.round(log.confidence * 100)}%
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-sm text-gray-400">N/A</span>
+                  )}
                 </div>
               </td>
             </tr>

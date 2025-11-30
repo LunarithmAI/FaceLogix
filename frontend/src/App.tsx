@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router';
 import { useAuthStore } from '@/stores/authStore';
 import { LoginPage } from '@/pages/LoginPage';
 import { CheckInPage } from '@/pages/CheckInPage';

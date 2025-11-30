@@ -13,7 +13,7 @@ import type { CheckType } from '@/types/attendance';
 export function CheckInPage() {
   const { user } = useAuthStore();
   const [mode, setMode] = useState<CheckType>('check_in');
-  const captureRef = useRef<(() => string | null) | null>(null);
+  const latestImageRef = useRef<string | null>(null);
   
   const { checkIn, checkOut, isLoading, result, reset } = useCheckIn({
     onSuccess: () => {
@@ -24,17 +24,29 @@ export function CheckInPage() {
     },
   });
 
+  // Store the latest captured image
   const handleCapture = useCallback((imageData: string) => {
-    captureRef.current = () => imageData;
+    latestImageRef.current = imageData;
   }, []);
 
   const handleAction = async () => {
-    // Access the capture function from window (set by CameraView)
-    const captureFrame = (window as unknown as { captureFrame?: () => string }).captureFrame;
-    if (!captureFrame) return;
-
-    const imageData = captureFrame();
-    if (!imageData) return;
+    // Try to get fresh capture from window, fallback to latest stored image
+    const captureFrame = (window as unknown as { captureFrame?: () => string | null }).captureFrame;
+    let imageData: string | null = null;
+    
+    if (captureFrame) {
+      imageData = captureFrame();
+    }
+    
+    // Fallback to stored image if captureFrame didn't work
+    if (!imageData) {
+      imageData = latestImageRef.current;
+    }
+    
+    if (!imageData) {
+      console.error('No image data available');
+      return;
+    }
 
     if (mode === 'check_in') {
       await checkIn(imageData);
@@ -134,9 +146,14 @@ export function CheckInPage() {
         {!result && (
           <button
             onClick={handleAction}
+            onTouchEnd={(e) => {
+              // Prevent double-firing on iOS
+              e.preventDefault();
+              handleAction();
+            }}
             disabled={isLoading}
             className={`
-              w-full btn-xl rounded-xl font-semibold
+              w-full btn-xl rounded-xl font-semibold select-none touch-manipulation
               ${mode === 'check_in' ? 'btn-success' : 'btn-primary'}
             `}
           >

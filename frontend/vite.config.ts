@@ -1,10 +1,14 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import basicSsl from '@vitejs/plugin-basic-ssl';
 import path from 'path';
 
 export default defineConfig({
   plugins: [
+    basicSsl(), // Enable HTTPS for camera access on network
+    tailwindcss(),
     react(),
     VitePWA({
       registerType: 'autoUpdate',
@@ -117,6 +121,7 @@ export default defineConfig({
     },
   },
   server: {
+    host: true, // Expose to network (0.0.0.0)
     proxy: {
       '/api/v1': {
         target: 'http://localhost:8000',

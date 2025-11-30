@@ -12,6 +12,27 @@ export interface AttendanceListResponse {
   pages: number;
 }
 
+// Backend response types (raw from API)
+interface BackendRecentActivity {
+  id: string;
+  timestamp: string;
+  type: 'check_in' | 'check_out';
+  status: string;
+  confidence_score: number | null;
+  user_id: string | null;
+  user_name: string | null;
+  device_id?: string | null;
+  device_name?: string | null;
+}
+
+interface BackendDashboardStats {
+  today: DailySummary;
+  total_users: number;
+  active_devices: number;
+  pending_enrollments: number;
+  recent_activity: BackendRecentActivity[];
+}
+
 export interface DashboardStats {
   today: DailySummary;
   total_users: number;
@@ -27,13 +48,34 @@ export interface ExportParams {
   format?: 'csv' | 'xlsx' | 'pdf';
 }
 
+/**
+ * Transform backend recent activity to frontend AttendanceLog format
+ */
+function transformRecentActivity(activity: BackendRecentActivity): AttendanceLog {
+  return {
+    id: activity.id,
+    user_id: activity.user_id || '',
+    user_name: activity.user_name || 'Unknown',
+    check_type: activity.type,
+    timestamp: activity.timestamp,
+    device_id: activity.device_id || '',
+    device_name: activity.device_name || '',
+    confidence: activity.confidence_score ?? 0,
+  };
+}
+
 export const reportsApi = {
   /**
    * Get dashboard statistics
    */
   async getDashboardStats(): Promise<DashboardStats> {
-    const response = await api.get<DashboardStats>(`${REPORTS_BASE}/dashboard`);
-    return response.data;
+    const response = await api.get<BackendDashboardStats>(`${REPORTS_BASE}/dashboard`);
+    
+    // Transform recent_activity to match frontend type
+    return {
+      ...response.data,
+      recent_activity: response.data.recent_activity.map(transformRecentActivity),
+    };
   },
 
   /**

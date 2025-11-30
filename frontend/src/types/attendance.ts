@@ -1,7 +1,23 @@
 export type CheckType = 'check_in' | 'check_out';
 
+// Frontend display status (mapped from backend)
 export type CheckStatus = 'success' | 'failed' | 'already_checked' | 'not_recognized' | 'no_face_detected';
 
+// Backend response status values
+export type BackendCheckStatus = 'on_time' | 'late' | 'unknown_user' | 'already_checked_in' | 'no_face_detected';
+
+// Raw response from backend
+export interface BackendCheckInResponse {
+  success: boolean;
+  status: BackendCheckStatus;
+  message: string;
+  user_id?: string;
+  user_name?: string;
+  check_in_time?: string;
+  confidence_score?: number;
+}
+
+// Transformed result for frontend display
 export interface CheckInResult {
   status: CheckStatus;
   message: string;

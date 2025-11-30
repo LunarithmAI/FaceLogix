@@ -43,16 +43,18 @@ async def find_similar_faces(
     """
     embedding_str = f"[{','.join(map(str, embedding))}]"
     
+    # Use $N style placeholders for asyncpg compatibility
+    # Cast the embedding string to vector type in the query
     query = text("""
         SELECT 
             fe.user_id::text,
-            1 - (fe.embedding <=> :embedding::vector) AS score
+            1 - (fe.embedding <=> CAST(:embedding AS vector)) AS score
         FROM face_embeddings fe
         JOIN users u ON fe.user_id = u.id
-        WHERE u.org_id = :org_id::uuid 
+        WHERE u.org_id = CAST(:org_id AS uuid)
           AND u.is_active = TRUE
-          AND 1 - (fe.embedding <=> :embedding::vector) >= :threshold
-        ORDER BY fe.embedding <=> :embedding::vector
+          AND 1 - (fe.embedding <=> CAST(:embedding AS vector)) >= :threshold
+        ORDER BY fe.embedding <=> CAST(:embedding AS vector)
         LIMIT :limit
     """)
     

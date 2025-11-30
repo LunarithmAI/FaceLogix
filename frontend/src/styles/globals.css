@@ -1,6 +1,43 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+/* Custom theme configuration for Tailwind v4 */
+@theme {
+  /* Primary color palette */
+  --color-primary-50: #eff6ff;
+  --color-primary-100: #dbeafe;
+  --color-primary-200: #bfdbfe;
+  --color-primary-300: #93c5fd;
+  --color-primary-400: #60a5fa;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #2563eb;
+  --color-primary-700: #1d4ed8;
+  --color-primary-800: #1e40af;
+  --color-primary-900: #1e3a8a;
+  --color-primary-950: #172554;
+
+  /* Custom animations */
+  --animate-pulse-slow: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-bounce-slow: bounce 2s infinite;
+  --animate-spin-slow: spin 3s linear infinite;
+  --animate-fade-in: fadeIn 0.3s ease-in-out;
+  --animate-slide-up: slideUp 0.3s ease-out;
+  --animate-scale-in: scaleIn 0.2s ease-out;
+
+  @keyframes fadeIn {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+  }
+
+  @keyframes slideUp {
+    0% { transform: translateY(10px); opacity: 0; }
+    100% { transform: translateY(0); opacity: 1; }
+  }
+
+  @keyframes scaleIn {
+    0% { transform: scale(0.95); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+}
 
 @layer base {
   html {
@@ -12,29 +49,30 @@
   }
 
   input, button, textarea, select {
-    @apply focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2;
+    @apply focus:outline-hidden focus:ring-2 focus:ring-primary-500 focus:ring-offset-2;
   }
 }
 
 @layer components {
+  /* Button base styles - using inline utilities instead of @apply btn */
   .btn {
     @apply inline-flex items-center justify-center px-4 py-2 font-medium rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .btn-primary {
-    @apply btn bg-primary-600 text-white hover:bg-primary-700 active:bg-primary-800;
+    @apply inline-flex items-center justify-center px-4 py-2 font-medium rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed bg-primary-600 text-white hover:bg-primary-700 active:bg-primary-800;
   }
 
   .btn-secondary {
-    @apply btn bg-gray-100 text-gray-700 hover:bg-gray-200 active:bg-gray-300;
+    @apply inline-flex items-center justify-center px-4 py-2 font-medium rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed bg-gray-100 text-gray-700 hover:bg-gray-200 active:bg-gray-300;
   }
 
   .btn-success {
-    @apply btn bg-green-600 text-white hover:bg-green-700 active:bg-green-800;
+    @apply inline-flex items-center justify-center px-4 py-2 font-medium rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed bg-green-600 text-white hover:bg-green-700 active:bg-green-800;
   }
 
   .btn-danger {
-    @apply btn bg-red-600 text-white hover:bg-red-700 active:bg-red-800;
+    @apply inline-flex items-center justify-center px-4 py-2 font-medium rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed bg-red-600 text-white hover:bg-red-700 active:bg-red-800;
   }
 
   .btn-lg {
@@ -62,11 +100,11 @@
   }
 
   .card {
-    @apply bg-white rounded-xl shadow-sm border border-gray-100 p-6;
+    @apply bg-white rounded-xl shadow-xs border border-gray-100 p-6;
   }
 
   .card-hover {
-    @apply card hover:shadow-md transition-shadow duration-200;
+    @apply bg-white rounded-xl shadow-xs border border-gray-100 p-6 hover:shadow-sm transition-shadow duration-200;
   }
 
   .face-guide {
