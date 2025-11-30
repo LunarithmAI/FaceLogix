@@ -1,0 +1,188 @@
+# =============================================================================
+# FaceLogix Development Docker Compose
+# Local development environment with hot reload and debugging
+# =============================================================================
+# Usage: docker compose -f docker/docker-compose.dev.yml up -d
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL Database with pgvector extension
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: facelogix-postgres-dev
+    environment:
+      POSTGRES_USER: ${DB_USER:-facelogix}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-devpassword}
+      POSTGRES_DB: ${DB_NAME:-facelogix}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-facelogix} -d ${DB_NAME:-facelogix}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - facelogix-network
+
+  # ---------------------------------------------------------------------------
+  # Redis Cache and Session Store
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: facelogix-redis-dev
+    command: redis-server --appendonly yes --save 60 1
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - facelogix-network
+
+  # ---------------------------------------------------------------------------
+  # Backend API Service (FastAPI)
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: facelogix-backend-dev
+    environment:
+      # Database connection
+      DATABASE_URL: postgresql+asyncpg://${DB_USER:-facelogix}:${DB_PASSWORD:-devpassword}@postgres:5432/${DB_NAME:-facelogix}
+      # Redis connection
+      REDIS_URL: redis://redis:6379/0
+      # Inter-service communication
+      FACE_SERVICE_URL: http://face-service:8001
+      # Security
+      JWT_SECRET_KEY: ${JWT_SECRET:-dev-secret-key-change-in-production}
+      JWT_ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 30
+      REFRESH_TOKEN_EXPIRE_DAYS: 7
+      DEVICE_TOKEN_SECRET: ${DEVICE_TOKEN_SECRET:-dev-device-secret}
+      # Application settings
+      DEBUG: "true"
+      LOG_LEVEL: DEBUG
+      CORS_ORIGINS: '["http://localhost:3000", "http://localhost:5173"]'
+    volumes:
+      # Mount source code for hot reload
+      - ../backend:/app
+      # Exclude virtual environment if present
+      - /app/.venv
+    ports:
+      - "8000:8000"
+      # Debug port for remote debugging
+      - "5678:5678"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - facelogix-network
+
+  # ---------------------------------------------------------------------------
+  # Face Recognition Service
+  # ---------------------------------------------------------------------------
+  face-service:
+    build:
+      context: ../face_service
+      dockerfile: Dockerfile
+      target: development
+    container_name: facelogix-face-dev
+    environment:
+      DEBUG: "true"
+      LOG_LEVEL: DEBUG
+      MODELS_DIR: /app/models
+      # Face recognition settings
+      FACE_DETECTION_THRESHOLD: 0.5
+      FACE_RECOGNITION_THRESHOLD: 0.75
+      MAX_FACES_PER_IMAGE: 10
+    volumes:
+      # Mount source code for hot reload
+      - ../face_service:/app
+      # Persist downloaded models
+      - face_models:/app/models
+      # Exclude virtual environment
+      - /app/.venv
+    ports:
+      - "8001:8001"
+      # Debug port
+      - "5679:5679"
+    restart: unless-stopped
+    networks:
+      - facelogix-network
+
+  # ---------------------------------------------------------------------------
+  # Frontend Development Server (Vite)
+  # ---------------------------------------------------------------------------
+  frontend:
+    image: node:20-alpine
+    container_name: facelogix-frontend-dev
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    environment:
+      NODE_ENV: development
+      # API endpoints
+      VITE_API_URL: http://localhost:8000/api/v1
+      VITE_FACE_SERVICE_URL: http://localhost:8001
+      # Development settings
+      VITE_DEBUG: "true"
+    volumes:
+      # Mount source code
+      - ../frontend:/app
+      # Separate node_modules to avoid platform conflicts
+      - frontend_node_modules:/app/node_modules
+    ports:
+      # Vite dev server
+      - "3000:5173"
+      # HMR websocket (if needed)
+      - "24678:24678"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - facelogix-network
+
+# =============================================================================
+# Named Volumes
+# =============================================================================
+volumes:
+  # PostgreSQL data persistence
+  postgres_data:
+    name: facelogix-postgres-data-dev
+  
+  # Redis data persistence
+  redis_data:
+    name: facelogix-redis-data-dev
+  
+  # Face recognition models (downloaded once, reused)
+  face_models:
+    name: facelogix-face-models-dev
+  
+  # Frontend node_modules (prevents platform-specific issues)
+  frontend_node_modules:
+    name: facelogix-frontend-modules-dev
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  facelogix-network:
+    name: facelogix-network-dev
+    driver: bridge

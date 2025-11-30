@@ -1,0 +1,294 @@
+# =============================================================================
+# FaceLogix Production Docker Compose
+# Production-ready deployment with security and performance optimizations
+# =============================================================================
+# Usage: docker compose -f docker/docker-compose.yml up -d
+# Prerequisites: 
+#   - Copy .env.example to .env and configure all secrets
+#   - Place SSL certificates in docker/nginx/ssl/
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Nginx Reverse Proxy & Load Balancer
+  # ---------------------------------------------------------------------------
+  nginx:
+    image: nginx:alpine
+    container_name: facelogix-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - frontend_static:/usr/share/nginx/html:ro
+    depends_on:
+      backend:
+        condition: service_started
+      frontend:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - facelogix-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL Database with pgvector extension
+  # NOTE: No exposed ports in production for security
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: facelogix-postgres
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+      # Performance tuning
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    # No exposed ports in production - internal network only
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - facelogix-network
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # Redis Cache and Session Store (Password Protected)
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: facelogix-redis
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+    volumes:
+      - redis_data:/data
+    # No exposed ports in production
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - facelogix-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Backend API Service (FastAPI with Gunicorn)
+  # Deployed with replicas for high availability
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+      target: production
+    environment:
+      # Database connection
+      DATABASE_URL: postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      # Redis connection with password
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      # Inter-service communication
+      FACE_SERVICE_URL: http://face-service:8001
+      # Security - MUST be set in production
+      JWT_SECRET_KEY: ${JWT_SECRET}
+      JWT_ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-7}
+      DEVICE_TOKEN_SECRET: ${DEVICE_TOKEN_SECRET}
+      # Application settings
+      DEBUG: "false"
+      LOG_LEVEL: INFO
+      CORS_ORIGINS: '["https://${DOMAIN}"]'
+      # Email settings (optional)
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      # Monitoring (optional)
+      SENTRY_DSN: ${SENTRY_DSN:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - facelogix-network
+    deploy:
+      mode: replicated
+      replicas: 2
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+      rollback_config:
+        parallelism: 1
+        delay: 10s
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # Face Recognition Service
+  # Resource-intensive - deployed with GPU support if available
+  # ---------------------------------------------------------------------------
+  face-service:
+    build:
+      context: ../face_service
+      dockerfile: Dockerfile
+      target: production
+    environment:
+      DEBUG: "false"
+      LOG_LEVEL: INFO
+      MODELS_DIR: /app/models
+      # Face recognition settings
+      FACE_DETECTION_THRESHOLD: ${FACE_DETECTION_THRESHOLD:-0.5}
+      FACE_RECOGNITION_THRESHOLD: ${FACE_RECOGNITION_THRESHOLD:-0.75}
+      MAX_FACES_PER_IMAGE: ${MAX_FACES_PER_IMAGE:-10}
+      # ONNX Runtime settings
+      ORT_LOGGING_LEVEL: WARNING
+    volumes:
+      - face_models:/app/models:ro
+    restart: unless-stopped
+    networks:
+      - facelogix-network
+    deploy:
+      mode: replicated
+      replicas: 2
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+      update_config:
+        parallelism: 1
+        delay: 30s
+        order: start-first
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # Frontend Build Service
+  # Builds static assets and exits - nginx serves the files
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      target: production
+      args:
+        VITE_API_URL: https://${DOMAIN}/api/v1
+    volumes:
+      - frontend_static:/usr/share/nginx/html
+    # This service builds and exits
+    restart: "no"
+    networks:
+      - facelogix-network
+
+# =============================================================================
+# Named Volumes
+# =============================================================================
+volumes:
+  # PostgreSQL data persistence
+  postgres_data:
+    name: facelogix-postgres-data
+    driver: local
+  
+  # Redis data persistence
+  redis_data:
+    name: facelogix-redis-data
+    driver: local
+  
+  # Face recognition models
+  face_models:
+    name: facelogix-face-models
+    driver: local
+  
+  # Frontend static assets (built by frontend service, served by nginx)
+  frontend_static:
+    name: facelogix-frontend-static
+    driver: local
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  facelogix-network:
+    name: facelogix-network
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.28.0.0/16
