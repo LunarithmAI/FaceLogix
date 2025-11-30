@@ -192,8 +192,6 @@ netstat -ano | findstr :8000
 taskkill /PID <PID> /F
 ```
 
-For more troubleshooting tips, see the [Deployment Guide](llm_docs/DEV_DEPLOYMENT_GUIDE.md).
-
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details.
