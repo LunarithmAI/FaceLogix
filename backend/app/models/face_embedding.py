@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, func
@@ -16,23 +16,15 @@ if TYPE_CHECKING:
 class FaceEmbedding(Base):
     __tablename__ = "face_embeddings"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        primary_key=True,
-        default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     embedding = mapped_column(Vector(512), nullable=False)
-    quality_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    quality_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     is_primary: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        nullable=False
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
     # Relationships
@@ -44,6 +36,6 @@ class FaceEmbedding(Base):
             "face_embeddings_user_primary_idx",
             "user_id",
             unique=True,
-            postgresql_where="is_primary = TRUE"
+            postgresql_where="is_primary = TRUE",
         ),
     )

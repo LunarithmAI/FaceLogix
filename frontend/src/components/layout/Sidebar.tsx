@@ -1,14 +1,14 @@
-import { NavLink, useLocation } from 'react-router';
+import { useEffect, useRef } from 'react';
+import { NavLink } from 'react-router';
 import {
+  ChartBarIcon,
+  ClipboardDocumentListIcon,
+  Cog6ToothIcon,
+  DeviceTabletIcon,
   HomeIcon,
   UsersIcon,
-  DeviceTabletIcon,
-  ClipboardDocumentListIcon,
-  ChartBarIcon,
-  Cog6ToothIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
-import { useState } from 'react';
 
 interface NavItem {
   name: string;
@@ -26,103 +26,110 @@ const navigation: NavItem[] = [
 ];
 
 interface SidebarProps {
-  className?: string;
+  isMobileOpen: boolean;
+  onClose: () => void;
 }
 
-export function Sidebar({ className = '' }: SidebarProps) {
-  const location = useLocation();
-  const [isMobileOpen, setIsMobileOpen] = useState(false);
-
-  const isActive = (href: string) => {
-    if (href === '/admin') {
-      return location.pathname === '/admin';
-    }
-    return location.pathname.startsWith(href);
-  };
-
-  const sidebarContent = (
+function NavigationContent({ onNavigate }: { onNavigate?: () => void }) {
+  return (
     <>
-      {/* Logo */}
-      <div className="flex items-center h-16 px-6 border-b border-gray-200">
-        <h1 className="text-xl font-bold text-primary-600">FaceLogix</h1>
+      <div className="flex h-16 items-center border-b border-gray-200 px-6">
+        <span className="text-xl font-bold text-primary-700">FaceLogix</span>
       </div>
-
-      {/* Navigation */}
-      <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
-        {navigation.map((item) => {
-          const active = isActive(item.href);
-          return (
-            <NavLink
-              key={item.name}
-              to={item.href}
-              onClick={() => setIsMobileOpen(false)}
-              className={`
-                flex items-center px-4 py-3 text-sm font-medium rounded-lg
-                transition-colors duration-200
-                ${active
+      <nav className="flex-1 space-y-1 overflow-y-auto px-4 py-4" aria-label="Administration">
+        {navigation.map((item) => (
+          <NavLink
+            key={item.name}
+            to={item.href}
+            end={item.href === '/admin'}
+            onClick={onNavigate}
+            className={({ isActive }) =>
+              `flex min-h-11 items-center rounded-lg px-4 py-3 text-sm font-medium transition-colors duration-200 motion-reduce:transition-none ${
+                isActive
                   ? 'bg-primary-50 text-primary-700'
                   : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                }
-              `}
-            >
-              <item.icon
-                className={`w-5 h-5 mr-3 ${active ? 'text-primary-600' : 'text-gray-400'}`}
-              />
-              {item.name}
-            </NavLink>
-          );
-        })}
+              }`
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <item.icon
+                  className={`mr-3 h-5 w-5 ${isActive ? 'text-primary-600' : 'text-gray-400'}`}
+                  aria-hidden="true"
+                />
+                {item.name}
+              </>
+            )}
+          </NavLink>
+        ))}
       </nav>
-
-      {/* Footer */}
-      <div className="p-4 border-t border-gray-200">
+      <div className="border-t border-gray-200 p-4">
         <NavLink
           to="/"
-          className="flex items-center px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+          onClick={onNavigate}
+          className="flex min-h-11 items-center rounded-lg px-4 py-3 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 motion-reduce:transition-none"
         >
           Check-In Kiosk
         </NavLink>
       </div>
     </>
   );
+}
+
+export function Sidebar({ isMobileOpen, onClose }: SidebarProps) {
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!isMobileOpen) {
+      return;
+    }
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+    document.body.style.overflow = 'hidden';
+    requestAnimationFrame(() => closeButtonRef.current?.focus());
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.body.style.overflow = '';
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [isMobileOpen, onClose]);
 
   return (
     <>
-      {/* Desktop sidebar */}
-      <div
-        className={`hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 bg-white border-r border-gray-200 ${className}`}
-      >
-        {sidebarContent}
-      </div>
+      <aside className="fixed inset-y-0 hidden w-64 flex-col border-r border-gray-200 bg-white lg:flex">
+        <NavigationContent />
+      </aside>
 
-      {/* Mobile sidebar backdrop */}
       {isMobileOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={() => setIsMobileOpen(false)}
+          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+          onClick={onClose}
+          aria-hidden="true"
         />
       )}
 
-      {/* Mobile sidebar */}
-      <div
-        className={`
-          fixed inset-y-0 left-0 z-50 w-64 bg-white transform transition-transform duration-300 lg:hidden
-          ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'}
-        `}
+      <aside
+        id="mobile-navigation"
+        aria-label="Mobile navigation"
+        aria-hidden={!isMobileOpen}
+        inert={!isMobileOpen}
+        className={`fixed inset-y-0 left-0 z-50 flex w-64 transform flex-col bg-white shadow-xl transition-transform duration-300 motion-reduce:transition-none lg:hidden ${
+          isMobileOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
       >
         <button
-          onClick={() => setIsMobileOpen(false)}
-          className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600"
+          ref={closeButtonRef}
+          type="button"
+          onClick={onClose}
+          className="absolute right-2 top-2 flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+          aria-label="Close navigation"
         >
-          <XMarkIcon className="w-6 h-6" />
+          <XMarkIcon className="h-6 w-6" aria-hidden="true" />
         </button>
-        {sidebarContent}
-      </div>
-
-      {/* Mobile menu button - exported via window for Header to access */}
-      {typeof window !== 'undefined' && (
-        (window as Window & { toggleSidebar?: () => void }).toggleSidebar = () => setIsMobileOpen(!isMobileOpen)
-      )}
+        <NavigationContent onNavigate={onClose} />
+      </aside>
     </>
   );
 }

@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
@@ -18,43 +18,29 @@ if TYPE_CHECKING:
 class User(Base, TimestampMixin):
     __tablename__ = "users"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        primary_key=True,
-        default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     org_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("orgs.id", ondelete="CASCADE"),
-        nullable=False
+        UUID(as_uuid=True), ForeignKey("orgs.id", ondelete="CASCADE"), nullable=False
     )
-    external_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(50), default="member", nullable=False)
-    department: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    department: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    enrolled_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True
-    )
+    enrolled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     org: Mapped["Org"] = relationship("Org", back_populates="users")
     face_embeddings: Mapped[list["FaceEmbedding"]] = relationship(
-        "FaceEmbedding",
-        back_populates="user",
-        cascade="all, delete-orphan"
+        "FaceEmbedding", back_populates="user", cascade="all, delete-orphan"
     )
     attendance_logs: Mapped[list["AttendanceLog"]] = relationship(
-        "AttendanceLog",
-        back_populates="user"
+        "AttendanceLog", back_populates="user"
     )
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
-        "RefreshToken",
-        back_populates="user",
-        cascade="all, delete-orphan"
+        "RefreshToken", back_populates="user", cascade="all, delete-orphan"
     )
 
     __table_args__ = (

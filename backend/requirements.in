@@ -1,0 +1,13 @@
+alembic>=1.13,<2
+asyncpg>=0.29,<1
+email-validator>=2.1,<3
+fastapi>=0.115,<1
+httpx>=0.27,<1
+passlib[bcrypt]>=1.7.4,<2
+pgvector>=0.3,<1
+pydantic>=2.10,<3
+pydantic-settings>=2.7,<3
+python-jose[cryptography]>=3.3,<4
+python-multipart>=0.0.20,<1
+sqlalchemy[asyncio]>=2.0.36,<3
+uvicorn[standard]>=0.34,<1

@@ -1,304 +1,175 @@
-#!/bin/bash
-# =============================================================================
-# FaceLogix Production Deployment Script
-# Deploys the application with zero-downtime updates
-# =============================================================================
-# Usage: ./scripts/deploy.sh [--build] [--migrate] [--rollback]
-# =============================================================================
+#!/usr/bin/env bash
+set -euo pipefail
 
-set -e  # Exit on error
-set -o pipefail  # Exit on pipe failure
-
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
-# Script directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-
-# Configuration
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+PROJECT_ROOT=$(dirname "$SCRIPT_DIR")
 COMPOSE_FILE="$PROJECT_ROOT/docker/docker-compose.yml"
 ENV_FILE="$PROJECT_ROOT/docker/.env"
-BACKUP_DIR="/backups/facelogix/pre-deploy"
-DEPLOY_LOG="/var/log/facelogix/deploy.log"
-MAX_RETRIES=3
-HEALTH_CHECK_TIMEOUT=60
-
-# Parse arguments
-BUILD_IMAGES=false
-RUN_MIGRATIONS=false
+STATE_DIR="$PROJECT_ROOT/docker/.deployment"
+CURRENT_FILE="$STATE_DIR/current"
+PREVIOUS_FILE="$STATE_DIR/previous"
+BACKUP_DIR=${BACKUP_DIR:-"$PROJECT_ROOT/backups/pre-deploy"}
+REQUESTED_TAG=""
 ROLLBACK=false
 
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        --build)
-            BUILD_IMAGES=true
-            shift
-            ;;
-        --migrate)
-            RUN_MIGRATIONS=true
-            shift
-            ;;
-        --rollback)
-            ROLLBACK=true
-            shift
-            ;;
-        *)
-            echo "Unknown option: $1"
-            echo "Usage: ./deploy.sh [--build] [--migrate] [--rollback]"
-            exit 1
-            ;;
+usage() {
+    cat <<'EOF'
+Usage: ./scripts/deploy.sh [--tag RELEASE_TAG] [--rollback]
+
+A normal deployment always validates, backs up, builds, migrates once, and starts
+one coherent release tag. --rollback changes application images only; it never
+restores or downgrades the database.
+EOF
+}
+
+while (($#)); do
+    case "$1" in
+        --tag) REQUESTED_TAG=${2:?missing release tag}; shift 2 ;;
+        --rollback) ROLLBACK=true; shift ;;
+        --help) usage; exit 0 ;;
+        *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
     esac
 done
 
-# -----------------------------------------------------------------------------
-# Helper Functions
-# -----------------------------------------------------------------------------
+log() { printf '[%s] %s\n' "$(date -u +%FT%TZ)" "$*"; }
+fail() { echo "ERROR: $*" >&2; exit 1; }
+require() { command -v "$1" >/dev/null || fail "$1 is required"; }
+compose() { docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"; }
 
-log_info() {
-    echo -e "${BLUE}[INFO]${NC} $(date '+%Y-%m-%d %H:%M:%S') - $1"
-    echo "[INFO] $(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$DEPLOY_LOG" 2>/dev/null || true
-}
-
-log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $(date '+%Y-%m-%d %H:%M:%S') - $1"
-    echo "[SUCCESS] $(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$DEPLOY_LOG" 2>/dev/null || true
-}
-
-log_warn() {
-    echo -e "${YELLOW}[WARNING]${NC} $(date '+%Y-%m-%d %H:%M:%S') - $1"
-    echo "[WARNING] $(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$DEPLOY_LOG" 2>/dev/null || true
-}
-
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $(date '+%Y-%m-%d %H:%M:%S') - $1"
-    echo "[ERROR] $(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$DEPLOY_LOG" 2>/dev/null || true
-}
-
-# Compose command
-compose_cmd() {
-    if command -v "docker-compose" &> /dev/null; then
-        docker-compose -f "$COMPOSE_FILE" "$@"
-    else
-        docker compose -f "$COMPOSE_FILE" "$@"
-    fi
-}
-
-# Health check function
-check_health() {
-    local service=$1
-    local endpoint=${2:-/health}
-    local timeout=${3:-30}
-    
-    log_info "Checking health of $service..."
-    
-    for i in $(seq 1 $timeout); do
-        if curl -sf "http://localhost${endpoint}" &> /dev/null; then
-            log_success "$service is healthy"
+wait_postgres() {
+    for _ in $(seq 1 60); do
+        if compose exec -T postgres pg_isready -U "$DB_USER" -d "$DB_NAME" >/dev/null 2>&1; then
             return 0
         fi
-        sleep 1
+        sleep 2
     done
-    
-    log_error "$service health check failed after ${timeout}s"
     return 1
 }
 
-# Create pre-deploy backup
-create_backup() {
-    log_info "Creating pre-deploy backup..."
-    mkdir -p "$BACKUP_DIR"
-    
-    # Backup database
-    compose_cmd exec -T postgres pg_dump -U "$DB_USER" "$DB_NAME" | \
-        gzip > "$BACKUP_DIR/db_$(date +%Y%m%d_%H%M%S).sql.gz" || {
-        log_warn "Database backup failed, continuing..."
-    }
-    
-    log_success "Pre-deploy backup created"
+wait_release() {
+    for _ in $(seq 1 90); do
+        if compose exec -T face-service python -c \
+            "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health/ready', timeout=5)" \
+            >/dev/null 2>&1 \
+            && compose exec -T backend python -c \
+            "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5)" \
+            >/dev/null 2>&1 \
+            && compose exec -T edge wget --quiet --tries=1 --spider \
+            http://127.0.0.1/health/live >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 2
+    done
+    return 1
 }
 
-# Rollback function
-rollback() {
-    log_error "Deployment failed, initiating rollback..."
-    
-    # Find latest backup
-    LATEST_BACKUP=$(ls -t "$BACKUP_DIR"/db_*.sql.gz 2>/dev/null | head -1)
-    
-    if [ -n "$LATEST_BACKUP" ]; then
-        log_info "Restoring from $LATEST_BACKUP..."
-        gunzip -c "$LATEST_BACKUP" | compose_cmd exec -T postgres psql -U "$DB_USER" "$DB_NAME"
-        log_success "Database restored"
-    fi
-    
-    # Restart previous containers
-    compose_cmd up -d
-    
-    log_warn "Rollback completed. Please investigate the failure."
-    exit 1
+activate_application() {
+    local tag=$1
+    export RELEASE_TAG=$tag
+    compose stop edge backend face-service >/dev/null 2>&1 || true
+    compose up --force-recreate --abort-on-container-exit --exit-code-from model-init model-init
+    compose up -d --no-deps --force-recreate face-service backend edge
+    wait_release
 }
 
-# -----------------------------------------------------------------------------
-# Pre-flight Checks
-# -----------------------------------------------------------------------------
+require docker
+require git
+require openssl
+require python3
+require sha256sum
+docker compose version >/dev/null
+docker info >/dev/null
+[[ -f "$ENV_FILE" ]] || fail "Environment file not found: $ENV_FILE"
 
-log_info "Starting FaceLogix deployment..."
-log_info "============================================="
-
-# Check environment file
-if [ ! -f "$ENV_FILE" ]; then
-    log_error "Environment file not found: $ENV_FILE"
-    log_error "Please copy .env.example to .env and configure it."
-    exit 1
-fi
-
-# Load environment variables
 set -a
+# shellcheck disable=SC1090
 source "$ENV_FILE"
 set +a
-
-# Verify required variables
-REQUIRED_VARS=("DB_USER" "DB_PASSWORD" "DB_NAME" "REDIS_PASSWORD" "JWT_SECRET" "DOMAIN")
-for var in "${REQUIRED_VARS[@]}"; do
-    if [ -z "${!var}" ]; then
-        log_error "Required environment variable $var is not set"
-        exit 1
-    fi
+REQUIRED=(DB_USER DB_PASSWORD DB_NAME JWT_SECRET_KEY DEVICE_TOKEN_SECRET DOMAIN RELEASE_TAG)
+for name in "${REQUIRED[@]}"; do
+    [[ -n ${!name:-} ]] || fail "$name is required"
+    [[ ${!name} != *CHANGE_ME* ]] || fail "$name still contains CHANGE_ME"
 done
+[[ ${#JWT_SECRET_KEY} -ge 32 ]] || fail "JWT_SECRET_KEY must be at least 32 characters"
+[[ ${#DEVICE_TOKEN_SECRET} -ge 32 ]] || fail "DEVICE_TOKEN_SECRET must be at least 32 characters"
 
-# Check SSL certificates
-if [ ! -f "$PROJECT_ROOT/docker/nginx/ssl/fullchain.pem" ]; then
-    log_error "SSL certificate not found: docker/nginx/ssl/fullchain.pem"
-    log_error "Please set up SSL certificates before deploying to production."
-    exit 1
-fi
+cd "$PROJECT_ROOT"
+git diff --quiet && git diff --cached --quiet || fail "Deployment requires a clean checked-out release"
+RELEASE_TAG=${REQUESTED_TAG:-$(git rev-parse --short=12 HEAD)}
+[[ $RELEASE_TAG =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$ ]] || fail "Invalid release tag: $RELEASE_TAG"
+export RELEASE_TAG
 
-log_success "Pre-flight checks passed"
+CERT="$PROJECT_ROOT/docker/nginx/ssl/fullchain.pem"
+KEY="$PROJECT_ROOT/docker/nginx/ssl/privkey.pem"
+TEMPLATE="$PROJECT_ROOT/docker/nginx/default.conf.template"
+MANIFEST="$PROJECT_ROOT/face_service/app/models/manifest.py"
+[[ -f $CERT && -f $KEY ]] || fail "Operator-provided fullchain.pem and privkey.pem are required"
+openssl x509 -in "$CERT" -noout -checkend 0 >/dev/null || fail "TLS certificate is invalid or expired"
+openssl pkey -in "$KEY" -noout >/dev/null || fail "TLS private key is invalid"
+openssl x509 -in "$CERT" -noout -checkhost "$DOMAIN" >/dev/null \
+    || fail "TLS certificate does not cover DOMAIN"
+CERT_PUBLIC=$(openssl x509 -in "$CERT" -pubkey -noout \
+    | openssl pkey -pubin -outform DER 2>/dev/null | sha256sum)
+KEY_PUBLIC=$(openssl pkey -in "$KEY" -pubout -outform DER 2>/dev/null | sha256sum)
+[[ ${CERT_PUBLIC%% *} == "${KEY_PUBLIC%% *}" ]] || fail "TLS certificate and private key do not match"
+[[ -f $TEMPLATE && $(<"$TEMPLATE") == *'${DOMAIN}'* ]] || fail "Nginx template is missing DOMAIN substitution"
+PYTHONPATH="$PROJECT_ROOT/face_service" python3 -c \
+    'from app.models.manifest import MODEL_MANIFEST; assert len(MODEL_MANIFEST) == 4; assert all(len(x.sha256) == 64 and x.size > 0 and x.url.startswith("https://") for x in MODEL_MANIFEST)'
+compose config --quiet
+mkdir -p "$STATE_DIR"
 
-# -----------------------------------------------------------------------------
-# Handle Rollback
-# -----------------------------------------------------------------------------
-
-if [ "$ROLLBACK" = true ]; then
-    rollback
+if [[ $ROLLBACK == true ]]; then
+    [[ -f $PREVIOUS_FILE ]] || fail "No previous deployment tag is recorded"
+    TARGET=$(<"$PREVIOUS_FILE")
+    OLD_CURRENT=${RELEASE_TAG}
+    [[ -f $CURRENT_FILE ]] && OLD_CURRENT=$(<"$CURRENT_FILE")
+    for image in backend face model-init edge; do
+        docker image inspect "facelogix-$image:$TARGET" >/dev/null 2>&1 \
+            || fail "Rollback image is unavailable: facelogix-$image:$TARGET"
+    done
+    log "Activating previous application release $TARGET without database restore"
+    activate_application "$TARGET" || fail "Rollback release failed readiness checks"
+    printf '%s\n' "$OLD_CURRENT" >"$PREVIOUS_FILE.tmp"
+    printf '%s\n' "$TARGET" >"$CURRENT_FILE.tmp"
+    mv "$PREVIOUS_FILE.tmp" "$PREVIOUS_FILE"
+    mv "$CURRENT_FILE.tmp" "$CURRENT_FILE"
+    log "Application rollback complete; database was not changed"
     exit 0
 fi
 
-# -----------------------------------------------------------------------------
-# Pull Latest Code
-# -----------------------------------------------------------------------------
+OLD_RELEASE=""
+[[ -f $CURRENT_FILE ]] && OLD_RELEASE=$(<"$CURRENT_FILE")
+log "Preparing release $RELEASE_TAG"
+compose up -d postgres
+wait_postgres || fail "PostgreSQL did not become ready"
+BACKUP_DIR="$BACKUP_DIR" "$PROJECT_ROOT/scripts/backup.sh" >/dev/null
+log "Verified pre-deploy database backup"
 
-log_info "Pulling latest code from repository..."
-cd "$PROJECT_ROOT"
+compose build backend face-service model-init edge
+log "Candidate images built"
+compose stop edge backend >/dev/null 2>&1 || true
 
-git fetch origin main
-git reset --hard origin/main
+if ! compose run --rm --no-deps backend alembic upgrade head; then
+    if [[ -n $OLD_RELEASE ]]; then
+        log "Migration failed; restarting previous application images without database restore"
+        activate_application "$OLD_RELEASE" || true
+    fi
+    fail "Database migration failed"
+fi
+log "Database migration completed once"
 
-log_success "Code updated"
-
-# -----------------------------------------------------------------------------
-# Create Pre-deploy Backup
-# -----------------------------------------------------------------------------
-
-create_backup
-
-# -----------------------------------------------------------------------------
-# Build Images (if requested)
-# -----------------------------------------------------------------------------
-
-if [ "$BUILD_IMAGES" = true ]; then
-    log_info "Building Docker images..."
-    compose_cmd build --no-cache
-    log_success "Images built"
+if ! activate_application "$RELEASE_TAG"; then
+    if [[ -n $OLD_RELEASE ]]; then
+        log "Candidate failed readiness; restoring application release $OLD_RELEASE without database restore"
+        activate_application "$OLD_RELEASE" || fail "Candidate and rollback application readiness both failed"
+    fi
+    fail "Candidate release failed readiness checks"
 fi
 
-# -----------------------------------------------------------------------------
-# Run Database Migrations (if requested)
-# -----------------------------------------------------------------------------
-
-if [ "$RUN_MIGRATIONS" = true ]; then
-    log_info "Running database migrations..."
-    compose_cmd run --rm backend alembic upgrade head || {
-        log_error "Migration failed"
-        rollback
-    }
-    log_success "Migrations completed"
+if [[ -n $OLD_RELEASE && $OLD_RELEASE != "$RELEASE_TAG" ]]; then
+    printf '%s\n' "$OLD_RELEASE" >"$PREVIOUS_FILE.tmp"
+    mv "$PREVIOUS_FILE.tmp" "$PREVIOUS_FILE"
 fi
-
-# -----------------------------------------------------------------------------
-# Deploy with Zero-Downtime
-# -----------------------------------------------------------------------------
-
-log_info "Deploying services with zero-downtime update..."
-
-# Scale up new containers first
-compose_cmd up -d --scale backend=3 --no-recreate
-
-# Wait for new containers to be healthy
-sleep 10
-
-# Check health
-check_health "backend" "/health" "$HEALTH_CHECK_TIMEOUT" || rollback
-
-# Scale back down and remove old containers
-compose_cmd up -d --scale backend=2 --remove-orphans
-
-log_success "Services deployed"
-
-# -----------------------------------------------------------------------------
-# Post-deploy Health Checks
-# -----------------------------------------------------------------------------
-
-log_info "Running post-deploy health checks..."
-
-# Check all services
-check_health "nginx" "/" 30 || rollback
-check_health "backend" "/health" 30 || rollback
-check_health "backend" "/health/ready" 30 || {
-    log_warn "Readiness check failed, but continuing..."
-}
-
-# Verify face service
-log_info "Verifying face service..."
-curl -sf "http://localhost:8001/health" &> /dev/null || {
-    log_warn "Face service health check failed"
-}
-
-log_success "All health checks passed"
-
-# -----------------------------------------------------------------------------
-# Cleanup
-# -----------------------------------------------------------------------------
-
-log_info "Cleaning up..."
-
-# Remove unused images
-docker image prune -f
-
-# Clean old backups (keep last 5)
-ls -t "$BACKUP_DIR"/db_*.sql.gz 2>/dev/null | tail -n +6 | xargs -r rm -f
-
-log_success "Cleanup completed"
-
-# -----------------------------------------------------------------------------
-# Deployment Complete
-# -----------------------------------------------------------------------------
-
-echo ""
-echo "============================================================================="
-echo -e "${GREEN}FaceLogix Deployment Successful!${NC}"
-echo "============================================================================="
-echo ""
-echo "Deployment Summary:"
-echo "  - Domain:        https://$DOMAIN"
-echo "  - Deployed at:   $(date)"
-echo "  - Git commit:    $(git rev-parse --short HEAD)"
-echo ""
-echo "Services Status:"
-compose_cmd ps
-echo ""
-echo "============================================================================="
+printf '%s\n' "$RELEASE_TAG" >"$CURRENT_FILE.tmp"
+mv "$CURRENT_FILE.tmp" "$CURRENT_FILE"
+log "Release $RELEASE_TAG is ready at https://$DOMAIN"

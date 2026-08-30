@@ -1,42 +1,26 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   UserCircleIcon,
   KeyIcon,
   ShieldCheckIcon,
   CheckCircleIcon,
-  ExclamationTriangleIcon,
   CalendarIcon,
-  BuildingOfficeIcon,
 } from '@heroicons/react/24/outline';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Loading } from '@/components/ui/Loading';
 import { RoleBadge } from '@/components/ui/Badge';
-import { useAuthStore } from '@/stores/authStore';
 import { authApi } from '@/services/auth';
+import { queryKeys } from '@/lib/queryClient';
 
-interface UserProfile {
-  id: string;
-  email: string | null;
-  name: string;
-  role: string;
-  department: string | null;
-  external_id: string | null;
-  is_active: boolean;
-  enrolled_at: string | null;
-  created_at: string;
-  updated_at: string;
-  org_name: string | null;
-}
 
 export function ProfilePage() {
-  const { user } = useAuthStore();
-  
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const profileQuery = useQuery({
+    queryKey: queryKeys.profile,
+    queryFn: ({ signal }) => authApi.getCurrentUser(signal),
+  });
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Password change form
@@ -46,28 +30,24 @@ export function ProfilePage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadProfile();
-  }, []);
+  const passwordMutation = useMutation({
+    mutationFn: () => authApi.changePassword(currentPassword, newPassword),
+    onSuccess: () => {
+      setSuccessMessage('Password changed successfully');
+      setShowPasswordForm(false);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    },
+    onError: (error) => {
+      setPasswordError(error.message);
+    },
+  });
 
-  const loadProfile = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const data = await authApi.getProfile();
-      setProfile(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load profile');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleChangePassword = (event: React.FormEvent) => {
+    event.preventDefault();
     setPasswordError(null);
 
-    // Validate passwords
     if (newPassword.length < 8) {
       setPasswordError('New password must be at least 8 characters');
       return;
@@ -77,23 +57,10 @@ export function ProfilePage() {
       return;
     }
 
-    try {
-      setIsSaving(true);
-      await authApi.changePassword(currentPassword, newPassword);
-      setSuccessMessage('Password changed successfully');
-      setShowPasswordForm(false);
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-      setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (err) {
-      setPasswordError(err instanceof Error ? err.message : 'Failed to change password');
-    } finally {
-      setIsSaving(false);
-    }
+    passwordMutation.mutate();
   };
 
-  if (isLoading) {
+  if (profileQuery.isPending) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loading size="lg" text="Loading profile..." />
@@ -101,19 +68,18 @@ export function ProfilePage() {
     );
   }
 
-  const displayProfile = profile || {
-    id: user?.id || '',
-    email: null,
-    name: user?.name || 'Unknown',
-    role: user?.role || 'member',
-    department: null,
-    external_id: null,
-    is_active: true,
-    enrolled_at: null,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    org_name: null,
-  };
+  if (profileQuery.error !== null || profileQuery.data === undefined) {
+    return (
+      <div className="p-6 text-center text-red-700" role="alert">
+        <p>{profileQuery.error?.message ?? 'Profile data is unavailable'}</p>
+        <Button className="mt-4" onClick={() => void profileQuery.refetch()}>
+          Try again
+        </Button>
+      </div>
+    );
+  }
+
+  const displayProfile = profileQuery.data;
 
   return (
     <div className="space-y-6">
@@ -124,12 +90,6 @@ export function ProfilePage() {
       </div>
 
       {/* Messages */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2">
-          <ExclamationTriangleIcon className="w-5 h-5" />
-          {error}
-        </div>
-      )}
       {successMessage && (
         <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center gap-2">
           <CheckCircleIcon className="w-5 h-5" />
@@ -150,7 +110,7 @@ export function ProfilePage() {
               <h2 className="text-xl font-semibold text-gray-900">{displayProfile.name}</h2>
               <p className="text-gray-500 mt-1">{displayProfile.email || 'No email set'}</p>
               <div className="mt-3">
-                <RoleBadge role={displayProfile.role as 'admin' | 'manager' | 'member'} />
+                <RoleBadge role={displayProfile.role} />
               </div>
               
               {/* Status badges */}
@@ -180,43 +140,32 @@ export function ProfilePage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-500">Full Name</label>
-                  <p className="mt-1 text-gray-900">{displayProfile.name}</p>
+                  <dt className="block text-sm font-medium text-gray-500">Full Name</dt>
+                  <dd className="mt-1 text-gray-900">{displayProfile.name}</dd>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-500">Email Address</label>
-                  <p className="mt-1 text-gray-900">{displayProfile.email || 'Not set'}</p>
+                  <dt className="block text-sm font-medium text-gray-500">Email Address</dt>
+                  <dd className="mt-1 text-gray-900">{displayProfile.email || 'Not set'}</dd>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-500">Department</label>
-                  <p className="mt-1 text-gray-900">{displayProfile.department || 'Not assigned'}</p>
+                  <dt className="block text-sm font-medium text-gray-500">Department</dt>
+                  <dd className="mt-1 text-gray-900">{displayProfile.department || 'Not assigned'}</dd>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-500">Employee ID</label>
-                  <p className="mt-1 text-gray-900">{displayProfile.external_id || 'Not set'}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-500">Organization</label>
-                  <p className="mt-1 text-gray-900 flex items-center gap-1">
-                    <BuildingOfficeIcon className="w-4 h-4 text-gray-400" />
-                    {displayProfile.org_name || 'Unknown'}
-                  </p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-500">Member Since</label>
-                  <p className="mt-1 text-gray-900 flex items-center gap-1">
-                    <CalendarIcon className="w-4 h-4 text-gray-400" />
+                  <dt className="block text-sm font-medium text-gray-500">Member Since</dt>
+                  <dd className="mt-1 text-gray-900 flex items-center gap-1">
+                    <CalendarIcon className="w-4 h-4 text-gray-400" aria-hidden="true" />
                     {new Date(displayProfile.created_at).toLocaleDateString()}
-                  </p>
+                  </dd>
                 </div>
-              </div>
+              </dl>
 
               {displayProfile.enrolled_at && (
                 <div className="pt-4 border-t border-gray-100">
                   <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <ShieldCheckIcon className="w-5 h-5 text-green-500" />
+                    <ShieldCheckIcon className="w-5 h-5 text-green-500" aria-hidden="true" />
                     Face enrolled on {new Date(displayProfile.enrolled_at).toLocaleDateString()}
                   </div>
                 </div>
@@ -274,7 +223,7 @@ export function ProfilePage() {
                   required
                 />
                 <div className="flex gap-3">
-                  <Button type="submit" isLoading={isSaving}>
+                  <Button type="submit" isLoading={passwordMutation.isPending}>
                     Update Password
                   </Button>
                   <Button 

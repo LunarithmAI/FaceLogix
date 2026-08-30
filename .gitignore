@@ -62,12 +62,14 @@ build/
 # Docker
 docker/.env
 
+docker/.deployment/
 # OS
 .DS_Store
 Thumbs.db
 
 # Face service models (large files)
 face_service/models/*.onnx
+face_service/.test-models*/
 
 # SSL certificates
 docker/nginx/ssl/*.pem
@@ -93,6 +95,3 @@ coverage/
 # Frontend
 frontend/.cache/
 frontend/dist/
-
-# LLM docs
-llm_docs

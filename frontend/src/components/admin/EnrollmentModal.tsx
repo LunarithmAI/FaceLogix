@@ -1,10 +1,11 @@
-import { useState, useCallback } from 'react';
+import { useRef, useState } from 'react';
 import { CameraIcon, CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/outline';
-import { Modal, ModalFooter } from '@/components/ui/Modal';
-import { Button } from '@/components/ui/Button';
 import { CameraView } from '@/components/camera/CameraView';
-import type { User } from '@/types/user';
+import type { CameraViewHandle } from '@/components/camera/CameraView';
+import { Button } from '@/components/ui/Button';
+import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { usersApi } from '@/services/users';
+import type { User } from '@/types/user';
 
 interface EnrollmentModalProps {
   isOpen: boolean;
@@ -26,43 +27,30 @@ export function EnrollmentModal({
   const [isEnrolling, setIsEnrolling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const cameraRef = useRef<CameraViewHandle>(null);
 
-  const handleCapture = useCallback(() => {
-    const captureFrame = (window as Window & { captureFrame?: () => string | null }).captureFrame;
-    if (!captureFrame) {
-      setError('Camera not ready. Please wait a moment and try again.');
+  const handleCapture = () => {
+    const imageData = cameraRef.current?.captureFrame() ?? null;
+    if (imageData === null) {
+      setError('The camera is not ready. Wait for the live preview, then try again.');
       return;
     }
-
-    const imageData = captureFrame();
-    if (!imageData) {
-      setError('Failed to capture image. Please try again.');
-      return;
-    }
-
     setError(null);
-    setCaptures((prev) => [...prev, imageData].slice(0, MAX_CAPTURES));
-  }, []);
-
-  const handleRemoveCapture = (index: number) => {
-    setCaptures((prev) => prev.filter((_, i) => i !== index));
+    setCaptures((current) => [...current, imageData].slice(0, MAX_CAPTURES));
   };
 
   const handleEnroll = async () => {
-    if (!user || captures.length < MIN_CAPTURES) return;
-
+    if (user === null || captures.length < MIN_CAPTURES) {
+      return;
+    }
     setIsEnrolling(true);
     setError(null);
-
     try {
-      await usersApi.enrollFace({
-        user_id: user.id,
-        images: captures,
-      });
+      await usersApi.enrollFace({ user_id: user.id, images: captures });
       setSuccess(true);
       onSuccess?.();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to enroll face');
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : 'Face enrollment failed.');
     } finally {
       setIsEnrolling(false);
     }
@@ -75,81 +63,81 @@ export function EnrollmentModal({
     onClose();
   };
 
-  if (!user) return null;
+  if (user === null) {
+    return null;
+  }
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Face Enrollment" size="lg">
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
+      title="Face Enrollment"
+      description={`Capture ${MIN_CAPTURES}–${MAX_CAPTURES} clear photos of ${user.name}.`}
+      size="lg"
+    >
       {success ? (
-        <div className="text-center py-8">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <CheckCircleIcon className="w-8 h-8 text-green-600" />
+        <div className="py-8 text-center" role="status" aria-live="polite">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+            <CheckCircleIcon className="h-8 w-8 text-green-600" aria-hidden="true" />
           </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">
-            Face Enrolled Successfully
-          </h3>
-          <p className="text-gray-500">
-            {user.name}'s face has been enrolled with {captures.length} images.
+          <h3 className="mb-2 text-lg font-medium text-gray-900">Face Enrolled Successfully</h3>
+          <p className="text-gray-600">
+            {user.name}&apos;s face was enrolled with {captures.length} images.
           </p>
-          <Button onClick={handleClose} className="mt-6">
+          <Button type="button" onClick={handleClose} className="mt-6">
             Close
           </Button>
         </div>
       ) : (
         <>
-          <div className="mb-4">
-            <p className="text-sm text-gray-600">
-              Enrolling face for <strong>{user.name}</strong>
-            </p>
-            <p className="text-sm text-gray-500 mt-1">
-              Capture {MIN_CAPTURES}-{MAX_CAPTURES} photos from different angles for best results.
-            </p>
-          </div>
-
-          {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center text-red-600 text-sm">
-              <XCircleIcon className="w-5 h-5 mr-2" />
+          {error !== null && (
+            <div
+              className="mb-4 flex items-center rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+              role="alert"
+            >
+              <XCircleIcon className="mr-2 h-5 w-5 shrink-0" aria-hidden="true" />
               {error}
             </div>
           )}
 
-          {/* Camera view */}
           <div className="mb-4">
             <CameraView
-              onCapture={() => {}}
-              showGuide={true}
-              className="aspect-[4/3] w-full max-w-md mx-auto"
+              ref={cameraRef}
+              showGuide
+              className="mx-auto aspect-[4/3] w-full max-w-md"
             />
           </div>
 
-          {/* Capture button */}
-          <div className="flex justify-center mb-4">
+          <div className="mb-4 flex justify-center">
             <Button
+              type="button"
               onClick={handleCapture}
               disabled={captures.length >= MAX_CAPTURES}
-              leftIcon={<CameraIcon className="w-5 h-5" />}
+              leftIcon={<CameraIcon className="h-5 w-5" aria-hidden="true" />}
               size="lg"
             >
               Capture ({captures.length}/{MAX_CAPTURES})
             </Button>
           </div>
 
-          {/* Captured images */}
           {captures.length > 0 && (
             <div className="mb-4">
-              <p className="text-sm font-medium text-gray-700 mb-2">
-                Captured Images
-              </p>
-              <div className="flex gap-2 flex-wrap">
+              <p className="mb-2 text-sm font-medium text-gray-700">Captured Images</p>
+              <div className="flex flex-wrap gap-3">
                 {captures.map((capture, index) => (
-                  <div key={index} className="relative">
+                  <div key={capture} className="relative">
                     <img
                       src={capture}
                       alt={`Capture ${index + 1}`}
-                      className="w-20 h-20 object-cover rounded-lg border border-gray-200"
+                      className="h-20 w-20 rounded-lg border border-gray-200 object-cover"
                     />
                     <button
-                      onClick={() => handleRemoveCapture(index)}
-                      className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-xs hover:bg-red-600"
+                      type="button"
+                      onClick={() =>
+                        setCaptures((current) => current.filter((_, itemIndex) => itemIndex !== index))
+                      }
+                      className="absolute -right-3 -top-3 flex min-h-11 min-w-11 items-center justify-center rounded-full bg-red-600 text-white hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2"
+                      aria-label={`Remove capture ${index + 1}`}
                     >
                       &times;
                     </button>
@@ -160,13 +148,15 @@ export function EnrollmentModal({
           )}
 
           <ModalFooter>
-            <Button variant="secondary" onClick={handleClose}>
+            <Button type="button" variant="secondary" onClick={handleClose}>
               Cancel
             </Button>
             <Button
-              onClick={handleEnroll}
+              type="button"
+              onClick={() => void handleEnroll()}
               disabled={captures.length < MIN_CAPTURES}
               isLoading={isEnrolling}
+              loadingText="Enrolling"
             >
               Enroll Face
             </Button>

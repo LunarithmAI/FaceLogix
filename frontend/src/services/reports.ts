@@ -1,5 +1,11 @@
 import api from './api';
-import type { AttendanceLog, AttendanceListParams, DailySummary, AttendanceStats } from '@/types/attendance';
+import type {
+  AttendanceListParams,
+  AttendanceLog,
+  CheckType,
+  ReportDailySummary,
+  UserAttendanceStats,
+} from '@/types/attendance';
 
 const REPORTS_BASE = '/reports';
 const ATTENDANCE_BASE = '/attendance';
@@ -8,25 +14,56 @@ export interface AttendanceListResponse {
   items: AttendanceLog[];
   total: number;
   page: number;
-  limit: number;
+  page_size: number;
   pages: number;
 }
 
-// Backend response types (raw from API)
+interface BackendAttendanceLog {
+  id: string;
+  user_id: string | null;
+  user_name: string | null;
+  device_id: string | null;
+  device_name: string | null;
+  ts: string;
+  type: CheckType;
+  status: string;
+  confidence_score: number | null;
+}
+
+interface BackendAttendanceListResponse {
+  items: BackendAttendanceLog[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+}
+
 interface BackendRecentActivity {
   id: string;
   timestamp: string;
-  type: 'check_in' | 'check_out';
+  type: CheckType;
   status: string;
   confidence_score: number | null;
   user_id: string | null;
   user_name: string | null;
-  device_id?: string | null;
-  device_name?: string | null;
+  device_id: string | null;
+  device_name: string | null;
+}
+
+export interface DashboardToday {
+  date: string;
+  total_employees: number;
+  checked_in: number;
+  checked_out: number;
+  on_time: number;
+  late_arrivals: number;
+  absent: number;
+  average_check_in_time: string | null;
+  average_check_out_time: string | null;
 }
 
 interface BackendDashboardStats {
-  today: DailySummary;
+  today: DashboardToday;
   total_users: number;
   active_devices: number;
   pending_enrollments: number;
@@ -34,7 +71,7 @@ interface BackendDashboardStats {
 }
 
 export interface DashboardStats {
-  today: DailySummary;
+  today: DashboardToday;
   total_users: number;
   active_devices: number;
   pending_enrollments: number;
@@ -42,71 +79,74 @@ export interface DashboardStats {
 }
 
 export interface ExportParams {
-  start_date: string;
-  end_date: string;
+  from_date: string;
+  to_date: string;
   user_id?: string;
-  format?: 'csv' | 'xlsx' | 'pdf';
+  format?: 'csv';
 }
 
-/**
- * Transform backend recent activity to frontend AttendanceLog format
- */
-function transformRecentActivity(activity: BackendRecentActivity): AttendanceLog {
+function transformAttendanceLog(log: BackendAttendanceLog): AttendanceLog {
   return {
-    id: activity.id,
-    user_id: activity.user_id || '',
-    user_name: activity.user_name || 'Unknown',
-    check_type: activity.type,
-    timestamp: activity.timestamp,
-    device_id: activity.device_id || '',
-    device_name: activity.device_name || '',
-    confidence: activity.confidence_score ?? 0,
+    id: log.id,
+    user_id: log.user_id ?? '',
+    user_name: log.user_name ?? 'Unknown',
+    check_type: log.type,
+    timestamp: log.ts,
+    device_id: log.device_id ?? '',
+    device_name: log.device_name ?? '',
+    confidence: log.confidence_score ?? 0,
   };
 }
 
+function transformRecentActivity(activity: BackendRecentActivity): AttendanceLog {
+  return transformAttendanceLog({
+    ...activity,
+    ts: activity.timestamp,
+  });
+}
+
 export const reportsApi = {
-  /**
-   * Get dashboard statistics
-   */
-  async getDashboardStats(): Promise<DashboardStats> {
-    const response = await api.get<BackendDashboardStats>(`${REPORTS_BASE}/dashboard`);
-    
-    // Transform recent_activity to match frontend type
+  async getDashboardStats(signal?: AbortSignal): Promise<DashboardStats> {
+    const response = await api.get<BackendDashboardStats>(`${REPORTS_BASE}/dashboard`, { signal });
     return {
       ...response.data,
       recent_activity: response.data.recent_activity.map(transformRecentActivity),
     };
   },
 
-  /**
-   * Get attendance logs with filtering
-   */
-  async getAttendanceLogs(params: AttendanceListParams = {}): Promise<AttendanceListResponse> {
-    const response = await api.get<AttendanceListResponse>(ATTENDANCE_BASE, { params });
-    return response.data;
+  async getAttendanceLogs(
+    params: AttendanceListParams = {},
+    signal?: AbortSignal
+  ): Promise<AttendanceListResponse> {
+    const response = await api.get<BackendAttendanceListResponse>(ATTENDANCE_BASE, {
+      params,
+      signal,
+    });
+    return {
+      ...response.data,
+      items: response.data.items.map(transformAttendanceLog),
+    };
   },
 
-  /**
-   * Get attendance statistics for a user
-   */
-  async getUserStats(userId: string): Promise<AttendanceStats> {
-    const response = await api.get<AttendanceStats>(`${REPORTS_BASE}/users/${userId}/stats`);
-    return response.data;
-  },
-
-  /**
-   * Get daily summary for a date range
-   */
-  async getDailySummaries(startDate: string, endDate: string): Promise<DailySummary[]> {
-    const response = await api.get<DailySummary[]>(`${REPORTS_BASE}/daily-summaries`, {
-      params: { start_date: startDate, end_date: endDate },
+  async getUserStats(userId: string, signal?: AbortSignal): Promise<UserAttendanceStats> {
+    const response = await api.get<UserAttendanceStats>(`${REPORTS_BASE}/users/${userId}/stats`, {
+      signal,
     });
     return response.data;
   },
 
-  /**
-   * Export attendance report
-   */
+  async getDailySummaries(
+    fromDate: string,
+    toDate: string,
+    signal?: AbortSignal
+  ): Promise<ReportDailySummary[]> {
+    const response = await api.get<ReportDailySummary[]>(`${REPORTS_BASE}/daily-summaries`, {
+      params: { from_date: fromDate, to_date: toDate },
+      signal,
+    });
+    return response.data;
+  },
+
   async exportReport(params: ExportParams): Promise<Blob> {
     const response = await api.get<Blob>(`${REPORTS_BASE}/export`, {
       params,
@@ -115,22 +155,22 @@ export const reportsApi = {
     return response.data;
   },
 
-  /**
-   * Get weekly attendance trend
-   */
-  async getWeeklyTrend(): Promise<{ date: string; check_ins: number; check_outs: number }[]> {
+  async getWeeklyTrend(
+    signal?: AbortSignal
+  ): Promise<{ date: string; check_ins: number; check_outs: number }[]> {
     const response = await api.get<{ date: string; check_ins: number; check_outs: number }[]>(
-      `${REPORTS_BASE}/weekly-trend`
+      `${REPORTS_BASE}/weekly-trend`,
+      { signal }
     );
     return response.data;
   },
 
-  /**
-   * Get department-wise attendance summary
-   */
-  async getDepartmentSummary(): Promise<{ department: string; present: number; absent: number }[]> {
+  async getDepartmentSummary(
+    signal?: AbortSignal
+  ): Promise<{ department: string; present: number; absent: number }[]> {
     const response = await api.get<{ department: string; present: number; absent: number }[]>(
-      `${REPORTS_BASE}/department-summary`
+      `${REPORTS_BASE}/department-summary`,
+      { signal }
     );
     return response.data;
   },

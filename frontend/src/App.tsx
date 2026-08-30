@@ -1,15 +1,33 @@
+import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router';
 import { useAuthStore } from '@/stores/authStore';
 import { LoginPage } from '@/pages/LoginPage';
 import { CheckInPage } from '@/pages/CheckInPage';
-import { DashboardPage } from '@/pages/DashboardPage';
-import { UsersPage } from '@/pages/UsersPage';
-import { DevicesPage } from '@/pages/DevicesPage';
-import { AttendancePage } from '@/pages/AttendancePage';
-import { ReportsPage } from '@/pages/ReportsPage';
-import { SettingsPage } from '@/pages/SettingsPage';
-import { ProfilePage } from '@/pages/ProfilePage';
+import { Loading } from '@/components/ui/Loading';
+import { OPERATOR_ROLES } from '@/types/roles';
 import { AppLayout } from '@/components/layout/AppLayout';
+
+const DashboardPage = lazy(() =>
+  import('@/pages/DashboardPage').then((module) => ({ default: module.DashboardPage }))
+);
+const UsersPage = lazy(() =>
+  import('@/pages/UsersPage').then((module) => ({ default: module.UsersPage }))
+);
+const DevicesPage = lazy(() =>
+  import('@/pages/DevicesPage').then((module) => ({ default: module.DevicesPage }))
+);
+const AttendancePage = lazy(() =>
+  import('@/pages/AttendancePage').then((module) => ({ default: module.AttendancePage }))
+);
+const ReportsPage = lazy(() =>
+  import('@/pages/ReportsPage').then((module) => ({ default: module.ReportsPage }))
+);
+const SettingsPage = lazy(() =>
+  import('@/pages/SettingsPage').then((module) => ({ default: module.SettingsPage }))
+);
+const ProfilePage = lazy(() =>
+  import('@/pages/ProfilePage').then((module) => ({ default: module.ProfilePage }))
+);
 
 interface PrivateRouteProps {
   children: React.ReactNode;
@@ -38,12 +56,17 @@ function AdminRoute({ children }: AdminRouteProps) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Only allow admin and manager roles to access admin routes
-  if (user?.role !== 'admin' && user?.role !== 'manager') {
+  if (user === null || !OPERATOR_ROLES.includes(user.role)) {
     return <Navigate to="/" replace />;
   }
 
-  return <AppLayout>{children}</AppLayout>;
+  return (
+    <AppLayout>
+      <Suspense fallback={<Loading size="lg" text="Loading page..." />}>
+        {children}
+      </Suspense>
+    </AppLayout>
+  );
 }
 
 interface PublicRouteProps {
@@ -54,8 +77,7 @@ function PublicRoute({ children }: PublicRouteProps) {
   const { isAuthenticated, user } = useAuthStore();
 
   if (isAuthenticated) {
-    // Redirect admins/managers to dashboard, others to check-in
-    if (user?.role === 'admin' || user?.role === 'manager') {
+    if (user !== null && OPERATOR_ROLES.includes(user.role)) {
       return <Navigate to="/admin" replace />;
     }
     return <Navigate to="/" replace />;

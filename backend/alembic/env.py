@@ -1,6 +1,7 @@
 """Alembic environment configuration for async SQLAlchemy."""
 
 import asyncio
+import os
 import sys
 from logging.config import fileConfig
 from pathlib import Path
@@ -15,8 +16,7 @@ from alembic import context
 backend_dir = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(backend_dir))
 
-# Import settings and models
-from app.core.config import settings
+# Import model metadata without constructing application settings.
 from app.models import (
     Base,
     AttendanceLog,
@@ -31,8 +31,10 @@ from app.models import (
 # Alembic Config object
 config = context.config
 
-# Set the database URL from settings
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+database_url = os.environ.get("DATABASE_URL")
+if not database_url:
+    raise RuntimeError("DATABASE_URL is required to run Alembic")
+config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 
 # Setup logging from alembic.ini
 if config.config_file_name is not None:

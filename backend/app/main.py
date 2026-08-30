@@ -6,15 +6,19 @@ middleware, routers, and lifecycle handlers.
 """
 
 import logging
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 from app.api.v1.router import api_router
 from app.core.config import settings
-from app.core.database import engine
+from app.core.database import AsyncSessionLocal, engine
+from app.services.face_client import FaceServiceClient
 
 # Configure logging
 logging.basicConfig(
@@ -25,22 +29,19 @@ logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
-    """
-    Application lifespan handler.
-    
-    Manages startup and shutdown events for the application.
-    """
-    # Startup
-    logger.info("Starting FaceLogix API...")
-    logger.info(f"Debug mode: {settings.DEBUG}")
-    
-    yield
-    
-    # Shutdown
-    logger.info("Shutting down FaceLogix API...")
-    await engine.dispose()
-    logger.info("Database connections closed.")
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    logger.info("Starting FaceLogix API")
+    async with httpx.AsyncClient(
+        base_url=settings.FACE_SERVICE_URL.rstrip("/"),
+        timeout=settings.FACE_SERVICE_TIMEOUT,
+    ) as http_client:
+        app.state.face_client = FaceServiceClient(http_client)
+        try:
+            yield
+        finally:
+            app.state.face_client = None
+            await engine.dispose()
+            logger.info("FaceLogix API stopped")
 
 
 # Create FastAPI application
@@ -79,15 +80,16 @@ app.add_middleware(
 
 # Global exception handler
 @app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Handle uncaught exceptions."""
-    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    logger.exception("Unhandled exception")
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
-            "success": False,
-            "error": "Internal server error",
-            "detail": str(exc) if settings.DEBUG else None,
+            "detail": {
+                "code": "INTERNAL_ERROR",
+                "message": "Internal server error",
+            }
         },
     )
 
@@ -96,28 +98,50 @@ async def global_exception_handler(request: Request, exc: Exception):
 app.include_router(api_router, prefix="/api/v1")
 
 
-# Health check endpoint
-@app.get("/health", tags=["Health"])
-async def health_check():
-    """
-    Health check endpoint.
-    
-    Returns the health status of the API. Use this endpoint for
-    load balancer health checks and monitoring.
-    """
-    return {
-        "status": "healthy",
-        "service": "facelogix-api",
-        "version": "1.0.0",
-    }
+@app.get("/health/live", tags=["Health"])
+async def health_live() -> dict[str, str]:
+    return {"status": "alive"}
+
+
+@app.get("/health/ready", tags=["Health"])
+async def health_ready(request: Request) -> JSONResponse:
+    database_ready = False
+    try:
+        async with AsyncSessionLocal() as db:
+            await db.execute(text("SELECT 1"))
+        database_ready = True
+    except Exception:
+        logger.exception("Database readiness check failed")
+
+    face_client = getattr(request.app.state, "face_client", None)
+    face_ready = isinstance(face_client, FaceServiceClient) and await face_client.ready()
+    if not database_ready or not face_ready:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "detail": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "message": "Required dependencies are unavailable",
+                },
+                "database": database_ready,
+                "face_service": face_ready,
+            },
+        )
+    return JSONResponse(
+        content={
+            "status": "ready",
+            "database": True,
+            "face_service": True,
+        }
+    )
 
 
 # Root endpoint
 @app.get("/", tags=["Root"])
-async def root():
+async def root() -> dict[str, str]:
     """
     Root endpoint.
-    
+
     Returns basic API information and links to documentation.
     """
     return {
@@ -126,16 +150,16 @@ async def root():
         "docs": "/api/docs",
         "redoc": "/api/redoc",
         "openapi": "/api/openapi.json",
-        "health": "/health",
+        "health": "/health/ready",
     }
 
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     uvicorn.run(
         "app.main:app",
-        host="0.0.0.0",
+        host="0.0.0.0",  # noqa: S104 - container service must accept external traffic
         port=8000,
         reload=settings.DEBUG,
         log_level="info",

@@ -1,24 +1,9 @@
 import api from './api';
-import type { 
-  LoginCredentials, 
-  LoginResponse, 
-  RefreshTokenResponse 
-} from '@/types/auth';
+import type { LoginCredentials, LoginResponse, UserProfile } from '@/types/auth';
 
 export const authApi = {
   login: async (credentials: LoginCredentials): Promise<LoginResponse> => {
-    const response = await api.post<LoginResponse>('/auth/login', credentials, {
-      headers: { 'Skip-Auth': 'true' },
-    });
-    return response.data;
-  },
-
-  refresh: async (refreshToken: string): Promise<RefreshTokenResponse> => {
-    const response = await api.post<RefreshTokenResponse>(
-      '/auth/refresh',
-      { refresh_token: refreshToken },
-      { headers: { 'Skip-Auth': 'true' } }
-    );
+    const response = await api.post<LoginResponse>('/auth/login', credentials);
     return response.data;
   },
 
@@ -26,14 +11,8 @@ export const authApi = {
     await api.post('/auth/logout', { refresh_token: refreshToken });
   },
 
-  getCurrentUser: async () => {
-    const response = await api.get('/auth/me');
-    return response.data;
-  },
-
-  // Alias for getCurrentUser
-  getProfile: async () => {
-    const response = await api.get('/auth/me');
+  getCurrentUser: async (signal?: AbortSignal): Promise<UserProfile> => {
+    const response = await api.get<UserProfile>('/auth/me', { signal });
     return response.data;
   },
 

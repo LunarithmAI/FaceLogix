@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   UsersIcon,
   DeviceTabletIcon,
@@ -10,30 +10,22 @@ import {
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { AttendanceList } from '@/components/attendance/AttendanceList';
 import { Loading } from '@/components/ui/Loading';
-import { reportsApi, type DashboardStats } from '@/services/reports';
+import { Button } from '@/components/ui/Button';
+import { reportsApi } from '@/services/reports';
+import { queryKeys } from '@/lib/queryClient';
 
 export function DashboardPage() {
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    data: stats,
+    isPending,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: queryKeys.dashboard,
+    queryFn: ({ signal }) => reportsApi.getDashboardStats(signal),
+  });
 
-  useEffect(() => {
-    loadStats();
-  }, []);
-
-  const loadStats = async () => {
-    try {
-      setIsLoading(true);
-      const data = await reportsApi.getDashboardStats();
-      setStats(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load dashboard');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  if (isLoading) {
+  if (isPending) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loading size="lg" text="Loading dashboard..." />
@@ -41,25 +33,28 @@ export function DashboardPage() {
     );
   }
 
-  if (error) {
+  if (error !== null) {
     return (
       <div className="text-center py-12">
         <ExclamationTriangleIcon className="w-12 h-12 text-red-500 mx-auto mb-4" />
-        <p className="text-red-600">{error}</p>
-        <button
-          onClick={loadStats}
-          className="mt-4 text-primary-600 hover:underline"
+        <p className="text-red-600">{error.message}</p>
+        <Button
+          type="button"
+          variant="secondary"
+          className="mt-4"
+          onClick={() => void refetch()}
         >
           Try again
-        </button>
+        </Button>
       </div>
     );
   }
 
-  const today = stats?.today;
-  const attendanceRate = today
-    ? Math.round((today.checked_in / today.total_employees) * 100)
-    : 0;
+  const today = stats.today;
+  const attendanceRate =
+    today.total_employees > 0
+      ? Math.round((today.checked_in / today.total_employees) * 100)
+      : 0;
 
   return (
     <div className="space-y-6">

@@ -8,12 +8,12 @@ export interface OrgSettings {
   timezone: string;
   is_active: boolean;
   settings: {
-    work_start_time?: string;  // e.g., "09:00"
-    work_end_time?: string;    // e.g., "17:00"
-    late_threshold_minutes?: number;
-    require_liveness?: boolean;
-    allow_remote_checkin?: boolean;
-    face_match_threshold?: number;
+    work_start_time: string;
+    work_end_time: string;
+    late_threshold_minutes: number;
+    require_liveness: boolean;
+    liveness_threshold: number;
+    face_match_threshold: number;
   };
   created_at: string;
   updated_at: string;
@@ -27,7 +27,7 @@ export interface OrgSettingsUpdate {
     work_end_time?: string;
     late_threshold_minutes?: number;
     require_liveness?: boolean;
-    allow_remote_checkin?: boolean;
+    liveness_threshold?: number;
     face_match_threshold?: number;
   };
 }
@@ -44,26 +44,28 @@ export interface SystemInfo {
 
 export const settingsApi = {
   // Get current organization settings
-  getOrgSettings: async (): Promise<OrgSettings> => {
-    const response = await api.get('/settings/org');
+  getOrgSettings: async (signal?: AbortSignal): Promise<OrgSettings> => {
+    const response = await api.get<OrgSettings>('/settings/org', { signal });
     return response.data;
   },
 
   // Update organization settings
   updateOrgSettings: async (data: OrgSettingsUpdate): Promise<OrgSettings> => {
-    const response = await api.patch('/settings/org', data);
+    const response = await api.patch<OrgSettings>('/settings/org', data);
     return response.data;
   },
 
   // Get system info
-  getSystemInfo: async (): Promise<SystemInfo> => {
-    const response = await api.get('/settings/system');
+  getSystemInfo: async (signal?: AbortSignal): Promise<SystemInfo> => {
+    const response = await api.get<SystemInfo>('/settings/system', { signal });
     return response.data;
   },
 
   // Test face service connection
   testFaceService: async (): Promise<{ status: string; latency_ms: number }> => {
-    const response = await api.get('/settings/test-face-service');
+    const response = await api.get<{ status: string; latency_ms: number }>(
+      '/settings/test-face-service'
+    );
     return response.data;
   },
 };

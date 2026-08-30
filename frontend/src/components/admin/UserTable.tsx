@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   PencilIcon,
   TrashIcon,
@@ -8,6 +7,10 @@ import {
 import type { User } from '@/types/user';
 import { Badge, RoleBadge, StatusBadge } from '@/components/ui/Badge';
 import { formatSmartDate } from '@/utils/date';
+import {
+  DisclosureMenu,
+  disclosureMenuItemClass,
+} from '@/components/ui/DisclosureMenu';
 
 interface UserTableProps {
   users: User[];
@@ -15,6 +18,7 @@ interface UserTableProps {
   onEdit?: (user: User) => void;
   onDelete?: (user: User) => void;
   onEnrollFace?: (user: User) => void;
+  canManageElevatedUsers: boolean;
 }
 
 export function UserTable({
@@ -23,14 +27,14 @@ export function UserTable({
   onEdit,
   onDelete,
   onEnrollFace,
+  canManageElevatedUsers,
 }: UserTableProps) {
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   if (isLoading) {
     return (
       <div className="animate-pulse space-y-3">
-        {[...Array(5)].map((_, i) => (
-          <div key={i} className="h-16 bg-gray-100 rounded-lg" />
+        {Array.from({ length: 5 }, (_, index) => (
+          <div key={index} className="h-16 bg-gray-100 rounded-lg" />
         ))}
       </div>
     );
@@ -45,7 +49,7 @@ export function UserTable({
   }
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500" role="region" aria-label="Users table" tabIndex={0}>
       <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>
@@ -108,56 +112,59 @@ export function UserTable({
                 {user.enrolled_at ? formatSmartDate(user.enrolled_at) : 'Never'}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <div className="relative">
-                  <button
-                    onClick={() => setOpenMenuId(openMenuId === user.id ? null : user.id)}
-                    className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
-                  >
-                    <EllipsisVerticalIcon className="w-5 h-5" />
-                  </button>
-
-                  {openMenuId === user.id && (
-                    <>
-                      <div
-                        className="fixed inset-0 z-10"
-                        onClick={() => setOpenMenuId(null)}
+                {(canManageElevatedUsers || user.role === 'member') && (
+                  <DisclosureMenu
+                    label={`Actions for ${user.name}`}
+                    trigger={
+                      <EllipsisVerticalIcon
+                        className="mx-auto h-5 w-5 text-gray-500"
+                        aria-hidden="true"
                       />
-                      <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+                    }
+                  >
+                    {(close) => (
+                      <>
                         <button
+                          type="button"
+                          role="menuitem"
                           onClick={() => {
+                            close();
                             onEdit?.(user);
-                            setOpenMenuId(null);
                           }}
-                          className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                          className={disclosureMenuItemClass}
                         >
-                          <PencilIcon className="w-4 h-4 mr-3" />
+                          <PencilIcon className="mr-3 h-4 w-4" aria-hidden="true" />
                           Edit
                         </button>
                         <button
+                          type="button"
+                          role="menuitem"
                           onClick={() => {
+                            close();
                             onEnrollFace?.(user);
-                            setOpenMenuId(null);
                           }}
-                          className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                          className={disclosureMenuItemClass}
                         >
-                          <FaceSmileIcon className="w-4 h-4 mr-3" />
+                          <FaceSmileIcon className="mr-3 h-4 w-4" aria-hidden="true" />
                           {user.enrolled_at ? 'Re-enroll Face' : 'Enroll Face'}
                         </button>
-                        <div className="border-t border-gray-100 my-1" />
+                        <div className="my-1 border-t border-gray-100" />
                         <button
+                          type="button"
+                          role="menuitem"
                           onClick={() => {
+                            close();
                             onDelete?.(user);
-                            setOpenMenuId(null);
                           }}
-                          className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                          className={`${disclosureMenuItemClass} text-red-600 hover:bg-red-50 focus-visible:bg-red-50`}
                         >
-                          <TrashIcon className="w-4 h-4 mr-3" />
+                          <TrashIcon className="mr-3 h-4 w-4" aria-hidden="true" />
                           Delete
                         </button>
-                      </div>
-                    </>
-                  )}
-                </div>
+                      </>
+                    )}
+                  </DisclosureMenu>
+                )}
               </td>
             </tr>
           ))}

@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   ChartBarIcon,
   ArrowDownTrayIcon,
@@ -10,97 +11,81 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Loading } from '@/components/ui/Loading';
-import { reportsApi, type ExportParams } from '@/services/reports';
-import type { DailySummary } from '@/types/attendance';
+import { reportsApi } from '@/services/reports';
 import { formatApiDate, formatDisplayDate } from '@/utils/date';
+import { queryKeys } from '@/lib/queryClient';
 
-interface WeeklyTrend {
-  date: string;
-  check_ins: number;
-  check_outs: number;
-}
-
-interface DepartmentSummary {
-  department: string;
-  present: number;
-  absent: number;
-}
 
 export function ReportsPage() {
-  const [isLoading, setIsLoading] = useState(true);
-  const [isExporting, setIsExporting] = useState(false);
-  const [dailySummaries, setDailySummaries] = useState<DailySummary[]>([]);
-  const [weeklyTrend, setWeeklyTrend] = useState<WeeklyTrend[]>([]);
-  const [departmentSummary, setDepartmentSummary] = useState<DepartmentSummary[]>([]);
-
-  // Date range for reports
-  const [startDate, setStartDate] = useState(() => {
-    const date = new Date();
-    date.setDate(date.getDate() - 30);
-    return formatApiDate(date);
+  const [draftRange, setDraftRange] = useState(() => {
+    const fromDate = new Date();
+    fromDate.setDate(fromDate.getDate() - 30);
+    return {
+      from_date: formatApiDate(fromDate),
+      to_date: formatApiDate(new Date()),
+    };
   });
-  const [endDate, setEndDate] = useState(() => formatApiDate(new Date()));
-  const [exportFormat, setExportFormat] = useState<'csv' | 'xlsx' | 'pdf'>('csv');
-
-  useEffect(() => {
-    loadReports();
-  }, []);
-
-  const loadReports = async () => {
-    try {
-      setIsLoading(true);
-      const [summaries, trend, departments] = await Promise.all([
-        reportsApi.getDailySummaries(startDate, endDate),
-        reportsApi.getWeeklyTrend(),
-        reportsApi.getDepartmentSummary(),
+  const [appliedRange, setAppliedRange] = useState(draftRange);
+  const reportsQuery = useQuery({
+    queryKey: queryKeys.reports(appliedRange),
+    queryFn: async ({ signal }) => {
+      const [dailySummaries, weeklyTrend, departmentSummary] = await Promise.all([
+        reportsApi.getDailySummaries(
+          appliedRange.from_date,
+          appliedRange.to_date,
+          signal
+        ),
+        reportsApi.getWeeklyTrend(signal),
+        reportsApi.getDepartmentSummary(signal),
       ]);
-      setDailySummaries(summaries);
-      setWeeklyTrend(trend);
-      setDepartmentSummary(departments);
-    } catch (error) {
-      console.error('Failed to load reports:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleExport = async () => {
-    try {
-      setIsExporting(true);
-      const params: ExportParams = {
-        start_date: startDate,
-        end_date: endDate,
-        format: exportFormat,
-      };
-      const blob = await reportsApi.exportReport(params);
-
-      // Download file
+      return { dailySummaries, weeklyTrend, departmentSummary };
+    },
+  });
+  const exportMutation = useMutation({
+    mutationFn: () =>
+      reportsApi.exportReport({
+        ...appliedRange,
+        format: 'csv',
+      }),
+    onSuccess: (blob) => {
       const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `attendance_report_${startDate}_${endDate}.${exportFormat}`;
-      document.body.appendChild(a);
-      a.click();
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `attendance_report_${appliedRange.from_date}_${appliedRange.to_date}.csv`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
       window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (error) {
-      console.error('Failed to export report:', error);
-    } finally {
-      setIsExporting(false);
-    }
-  };
+    },
+  });
+  const {
+    dailySummaries = [],
+    weeklyTrend = [],
+    departmentSummary = [],
+  } = reportsQuery.data ?? {};
 
   // Calculate summary stats
-  const totalCheckIns = dailySummaries.reduce((sum, d) => sum + (d.total_check_ins || 0), 0);
-  const totalCheckOuts = dailySummaries.reduce((sum, d) => sum + (d.total_check_outs || 0), 0);
+  const totalCheckIns = dailySummaries.reduce((sum, day) => sum + day.check_ins, 0);
+  const totalCheckOuts = dailySummaries.reduce((sum, day) => sum + day.check_outs, 0);
   const avgOnTime = dailySummaries.length > 0
-    ? Math.round(dailySummaries.reduce((sum, d) => sum + (d.on_time_percentage || 0), 0) / dailySummaries.length)
+    ? Math.round(dailySummaries.reduce((sum, day) => sum + day.on_time_percentage, 0) / dailySummaries.length)
     : 0;
 
-  if (isLoading) {
+  if (reportsQuery.isPending) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loading size="lg" text="Loading reports..." />
+      </div>
+    );
+  }
+
+  if (reportsQuery.error !== null) {
+    return (
+      <div className="p-6 text-center text-red-700" role="alert">
+        <p>{reportsQuery.error.message}</p>
+        <Button className="mt-4" onClick={() => void reportsQuery.refetch()}>
+          Try again
+        </Button>
       </div>
     );
   }
@@ -115,46 +100,51 @@ export function ReportsPage() {
         </div>
       </div>
 
+      {exportMutation.error !== null && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700" role="alert">
+          {exportMutation.error.message}
+        </div>
+      )}
+
       {/* Date Range & Export */}
       <Card>
         <div className="p-4">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Generate Report</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Input
               label="Start Date"
               type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
+              value={draftRange.from_date}
+              onChange={(event) =>
+                setDraftRange({ ...draftRange, from_date: event.target.value })
+              }
             />
             <Input
               label="End Date"
               type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
+              value={draftRange.to_date}
+              onChange={(event) =>
+                setDraftRange({ ...draftRange, to_date: event.target.value })
+              }
             />
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Export Format
-              </label>
-              <select
-                value={exportFormat}
-                onChange={(e) => setExportFormat(e.target.value as 'csv' | 'xlsx' | 'pdf')}
-                className="block w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              >
-                <option value="csv">CSV</option>
-                <option value="xlsx">Excel (XLSX)</option>
-                <option value="pdf">PDF</option>
-              </select>
+            <div className="flex items-end">
+              <p className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-2 text-sm text-gray-600">
+                Export format: CSV
+              </p>
             </div>
             <div className="flex items-end">
-              <Button onClick={loadReports} variant="secondary" className="w-full">
+              <Button
+                onClick={() => setAppliedRange(draftRange)}
+                variant="secondary"
+                className="w-full"
+              >
                 Refresh
               </Button>
             </div>
             <div className="flex items-end">
               <Button
-                onClick={handleExport}
-                isLoading={isExporting}
+                onClick={() => exportMutation.mutate()}
+                isLoading={exportMutation.isPending}
                 leftIcon={<ArrowDownTrayIcon className="w-5 h-5" />}
                 className="w-full"
               >
@@ -351,16 +341,16 @@ export function ReportsPage() {
                         {formatDisplayDate(day.date)}
                       </td>
                       <td className="py-3 px-4 text-right text-gray-900">
-                        {day.total_check_ins || 0}
+                        {day.check_ins}
                       </td>
                       <td className="py-3 px-4 text-right text-gray-900">
-                        {day.total_check_outs || 0}
+                        {day.check_outs}
                       </td>
                       <td className="py-3 px-4 text-right text-green-600">
-                        {day.on_time_count || 0}
+                        {day.on_time}
                       </td>
                       <td className="py-3 px-4 text-right text-orange-600">
-                        {day.late_count || 0}
+                        {day.late}
                       </td>
                     </tr>
                   ))}

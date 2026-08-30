@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   PencilIcon,
   TrashIcon,
@@ -9,6 +8,17 @@ import {
 import type { Device } from '@/types/device';
 import { Badge, StatusBadge } from '@/components/ui/Badge';
 import { formatSmartDate } from '@/utils/date';
+import {
+  DisclosureMenu,
+  disclosureMenuItemClass,
+} from '@/components/ui/DisclosureMenu';
+
+const DEVICE_TYPE_LABELS = {
+  kiosk: 'Kiosk',
+  tablet: 'Tablet',
+  mobile: 'Mobile',
+  web: 'Web',
+} as const;
 
 interface DeviceTableProps {
   devices: Device[];
@@ -25,26 +35,13 @@ export function DeviceTable({
   onDelete,
   onToggleStatus,
 }: DeviceTableProps) {
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
-  const getDeviceTypeIcon = (type: string) => {
-    switch (type) {
-      case 'kiosk':
-        return 'Kiosk';
-      case 'mobile':
-        return 'Mobile';
-      case 'web':
-        return 'Web';
-      default:
-        return type;
-    }
-  };
 
   if (isLoading) {
     return (
       <div className="animate-pulse space-y-3">
-        {[...Array(5)].map((_, i) => (
-          <div key={i} className="h-16 bg-gray-100 rounded-lg" />
+        {Array.from({ length: 5 }, (_, index) => (
+          <div key={index} className="h-16 bg-gray-100 rounded-lg" />
         ))}
       </div>
     );
@@ -59,7 +56,7 @@ export function DeviceTable({
   }
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500" role="region" aria-label="Devices table" tabIndex={0}>
       <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>
@@ -90,10 +87,10 @@ export function DeviceTable({
                 <div className="flex items-center">
                   <div
                     className={`w-10 h-10 flex-shrink-0 rounded-lg flex items-center justify-center ${
-                      device.status === 'active' ? 'bg-green-100' : 'bg-gray-100'
+                      device.is_active ? 'bg-green-100' : 'bg-gray-100'
                     }`}
                   >
-                    {device.status === 'active' ? (
+                    {device.is_active ? (
                       <SignalIcon className="w-5 h-5 text-green-600" />
                     ) : (
                       <SignalSlashIcon className="w-5 h-5 text-gray-400" />
@@ -110,81 +107,80 @@ export function DeviceTable({
                 </div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
-                <Badge variant="default">{getDeviceTypeIcon(device.type)}</Badge>
+                <Badge variant="default">{DEVICE_TYPE_LABELS[device.device_type]}</Badge>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
-                <StatusBadge status={device.status} />
+                <StatusBadge status={device.is_active ? 'active' : 'inactive'} />
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                 {device.location || '-'}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {device.last_active_at
-                  ? formatSmartDate(device.last_active_at)
+                {device.last_seen_at
+                  ? formatSmartDate(device.last_seen_at)
                   : 'Never'}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <div className="relative">
-                  <button
-                    onClick={() =>
-                      setOpenMenuId(openMenuId === device.id ? null : device.id)
-                    }
-                    className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
-                  >
-                    <EllipsisVerticalIcon className="w-5 h-5" />
-                  </button>
-
-                  {openMenuId === device.id && (
+                <DisclosureMenu
+                  label={`Actions for ${device.name}`}
+                  trigger={
+                    <EllipsisVerticalIcon
+                      className="mx-auto h-5 w-5 text-gray-500"
+                      aria-hidden="true"
+                    />
+                  }
+                >
+                  {(close) => (
                     <>
-                      <div
-                        className="fixed inset-0 z-10"
-                        onClick={() => setOpenMenuId(null)}
-                      />
-                      <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
-                        <button
-                          onClick={() => {
-                            onEdit?.(device);
-                            setOpenMenuId(null);
-                          }}
-                          className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                        >
-                          <PencilIcon className="w-4 h-4 mr-3" />
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => {
-                            onToggleStatus?.(device);
-                            setOpenMenuId(null);
-                          }}
-                          className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                        >
-                          {device.status === 'active' ? (
-                            <>
-                              <SignalSlashIcon className="w-4 h-4 mr-3" />
-                              Deactivate
-                            </>
-                          ) : (
-                            <>
-                              <SignalIcon className="w-4 h-4 mr-3" />
-                              Activate
-                            </>
-                          )}
-                        </button>
-                        <div className="border-t border-gray-100 my-1" />
-                        <button
-                          onClick={() => {
-                            onDelete?.(device);
-                            setOpenMenuId(null);
-                          }}
-                          className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-                        >
-                          <TrashIcon className="w-4 h-4 mr-3" />
-                          Delete
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          close();
+                          onEdit?.(device);
+                        }}
+                        className={disclosureMenuItemClass}
+                      >
+                        <PencilIcon className="mr-3 h-4 w-4" aria-hidden="true" />
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          close();
+                          onToggleStatus?.(device);
+                        }}
+                        className={disclosureMenuItemClass}
+                      >
+                        {device.is_active ? (
+                          <>
+                            <SignalSlashIcon className="mr-3 h-4 w-4" aria-hidden="true" />
+                            Deactivate
+                          </>
+                        ) : (
+                          <>
+                            <SignalIcon className="mr-3 h-4 w-4" aria-hidden="true" />
+                            Activate
+                          </>
+                        )}
+                      </button>
+                      <div className="my-1 border-t border-gray-100" />
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          close();
+                          onDelete?.(device);
+                        }}
+                        className={`${disclosureMenuItemClass} text-red-600 hover:bg-red-50 focus-visible:bg-red-50`}
+                      >
+                        <TrashIcon className="mr-3 h-4 w-4" aria-hidden="true" />
+                        Delete
+                      </button>
                     </>
                   )}
-                </div>
+                </DisclosureMenu>
               </td>
             </tr>
           ))}

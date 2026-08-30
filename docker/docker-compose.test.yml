@@ -1,0 +1,18 @@
+name: facelogix-test
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16@sha256:eac621400b7b7ff52493883e41e930e3d104695fea5b68cc0c42370cf7880067
+    environment:
+      POSTGRES_USER: facelogix_test
+      POSTGRES_PASSWORD: facelogix_test
+      POSTGRES_DB: facelogix_test
+    ports:
+      - "5433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U facelogix_test -d facelogix_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 20

@@ -1,8 +1,10 @@
+import type { UserRole } from '@/types/roles';
+
 export interface User {
   id: string;
   email?: string;
   name: string;
-  role: 'admin' | 'manager' | 'employee';
+  role: UserRole;
   org_id: string;
   is_active?: boolean;
   created_at?: string;
@@ -10,6 +12,7 @@ export interface User {
 }
 
 export interface LoginCredentials {
+  organization: string;
   email: string;
   password: string;
 }
@@ -34,8 +37,20 @@ export interface LoginResponse {
   token_type: string;
   user_id: string;
   org_id: string;
-  role: 'admin' | 'manager' | 'employee';
+  role: UserRole;
   name: string;
+}
+
+export interface UserProfile {
+  id: string;
+  org_id: string;
+  email: string | null;
+  name: string;
+  role: UserRole;
+  department: string | null;
+  is_active: boolean;
+  enrolled_at: string | null;
+  created_at: string;
 }
 
 export interface RefreshTokenRequest {

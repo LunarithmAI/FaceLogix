@@ -1,99 +1,74 @@
-"""
-FastAPI application for Face Recognition Service.
-
-Provides endpoints for face detection, embedding generation,
-and liveness detection with model preloading on startup.
-"""
-
+import logging
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+import anyio
+from fastapi import FastAPI, Request, status
+from fastapi.responses import JSONResponse
 
 from app.api.v1.router import api_router
 from app.core.config import settings
-from app.models.loader import ModelLoader
+from app.core.errors import FaceServiceError
+from app.models.loader import FaceModels
+from app.pipeline.face import FacePipeline
+
+logging.basicConfig(level=settings.LOG_LEVEL)
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
-    """
-    Application lifespan manager.
-    
-    Handles startup and shutdown events:
-    - Startup: Load and warm up ML models
-    - Shutdown: Clean up resources
-    """
-    # Startup: Load and warm up models
-    print(f"Starting {settings.SERVICE_NAME}...")
-    print("Loading ML models...")
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    app.state.ready = False
+    app.state.inference_limiter = anyio.CapacityLimiter(settings.MAX_CONCURRENT_INFERENCES)
+    models = await anyio.to_thread.run_sync(FaceModels.load, settings)
+    app.state.face_pipeline = FacePipeline(models, settings)
+    app.state.ready = True
     try:
-        ModelLoader.warmup()
-        print("Models loaded and warmed up successfully")
-    except FileNotFoundError as e:
-        print(f"WARNING: {e}")
-        print("Service starting without models - endpoints may fail")
-    
-    yield
-    
-    # Shutdown: Clean up
-    print(f"Shutting down {settings.SERVICE_NAME}...")
-    ModelLoader.clear()
+        yield
+    finally:
+        app.state.ready = False
+        app.state.face_pipeline = None
 
 
-app = FastAPI(
-    title="FaceLogix Face Recognition Service",
-    description=(
-        "Face detection, embedding generation, and liveness detection API. "
-        "Provides endpoints for processing face images using RetinaFace "
-        "detection and ArcFace embedding generation."
-    ),
-    version="1.0.0",
-    lifespan=lifespan,
-    docs_url="/api/docs",
-    redoc_url="/api/redoc",
-    openapi_url="/api/openapi.json"
-)
-
-# Configure CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Include API router
-app.include_router(api_router, prefix="/api/v1")
-
-
-@app.get("/health", tags=["Health"])
-async def health_check() -> dict:
-    """
-    Health check endpoint.
-    
-    Returns service health status and model loading state.
-    """
-    models_loaded = (
-        "detector" in ModelLoader._instances and
-        "embedder" in ModelLoader._instances
+def create_app() -> FastAPI:
+    application = FastAPI(
+        title=settings.SERVICE_NAME,
+        description="Internal face analysis service",
+        version="1.0.0",
+        lifespan=lifespan,
     )
-    
-    return {
-        "status": "healthy",
-        "service": settings.SERVICE_NAME,
-        "models_loaded": models_loaded
-    }
+    application.state.ready = False
+    application.include_router(api_router, prefix="/api/v1")
+
+    @application.exception_handler(FaceServiceError)
+    async def face_error_handler(
+        _request: Request,
+        exc: FaceServiceError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": {"code": exc.code, "message": exc.message}},
+        )
+
+    @application.get("/health/live", tags=["Health"])
+    async def live() -> dict[str, str]:
+        return {"status": "alive"}
+
+    @application.get("/health/ready", tags=["Health"])
+    async def ready(request: Request) -> JSONResponse:
+        if not request.app.state.ready:
+            return JSONResponse(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                content={
+                    "detail": {
+                        "code": "MODEL_UNAVAILABLE",
+                        "message": "Face models are unavailable",
+                    }
+                },
+            )
+        return JSONResponse(content={"status": "ready"})
+
+    return application
 
 
-@app.get("/", tags=["Root"])
-async def root() -> dict:
-    """
-    Root endpoint with service information.
-    """
-    return {
-        "service": settings.SERVICE_NAME,
-        "version": "1.0.0",
-        "docs": "/api/docs"
-    }
+app = create_app()

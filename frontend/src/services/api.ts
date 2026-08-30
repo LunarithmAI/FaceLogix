@@ -1,67 +1,83 @@
-import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import { useAuthStore } from '@/stores/authStore';
-import type { ApiError } from '@/types/api';
+import type { RefreshTokenResponse } from '@/types/auth';
+import { normalizeApiError } from '@/services/apiError';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
+const API_BASE_URL = '/api/v1';
+
+type RetryableRequestConfig = InternalAxiosRequestConfig & { _retry?: boolean };
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000,
+  timeout: 30_000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Request interceptor to add auth token
+let refreshPromise: Promise<string | null> | null = null;
+
+function isSessionEndpoint(url: string | undefined): boolean {
+  return url?.includes('/auth/login') === true || url?.includes('/auth/refresh') === true;
+}
+
+async function refreshAccessToken(): Promise<string | null> {
+  const { tokens, setTokens } = useAuthStore.getState();
+  if (!tokens?.refresh_token) {
+    return null;
+  }
+  try {
+    const response = await axios.post<RefreshTokenResponse>(
+      `${API_BASE_URL}/auth/refresh`,
+      { refresh_token: tokens.refresh_token },
+      { timeout: 30_000 }
+    );
+    setTokens({ ...tokens, access_token: response.data.access_token });
+    return response.data.access_token;
+  } catch {
+    return null;
+  }
+}
+
 api.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
+  (config) => {
     const { tokens } = useAuthStore.getState();
-    
-    if (tokens?.access_token && !config.headers['Skip-Auth']) {
+    if (tokens?.access_token && !isSessionEndpoint(config.url)) {
       config.headers.Authorization = `Bearer ${tokens.access_token}`;
     }
-    
-    delete config.headers['Skip-Auth'];
     return config;
   },
-  (error) => Promise.reject(error)
+  (error: unknown) => Promise.reject(normalizeApiError(error))
 );
 
-// Response interceptor for token refresh
 api.interceptors.response.use(
   (response) => response,
-  async (error: AxiosError<ApiError>) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
-    
-    // Handle 401 errors
-    if (error.response?.status === 401 && !originalRequest._retry) {
+  async (error: AxiosError<unknown>) => {
+    const originalRequest = error.config as RetryableRequestConfig | undefined;
+    const isUnauthorized = error.response?.status === 401;
+    if (
+      isUnauthorized &&
+      originalRequest !== undefined &&
+      !originalRequest._retry &&
+      !isSessionEndpoint(originalRequest.url)
+    ) {
       originalRequest._retry = true;
-      
-      const { refreshToken, reset } = useAuthStore.getState();
-      const success = await refreshToken();
-      
-      if (success) {
-        const { tokens } = useAuthStore.getState();
-        if (tokens?.access_token) {
-          originalRequest.headers.Authorization = `Bearer ${tokens.access_token}`;
-          return api(originalRequest);
-        }
+      refreshPromise ??= refreshAccessToken().finally(() => {
+        refreshPromise = null;
+      });
+      const accessToken = await refreshPromise;
+      if (accessToken !== null) {
+        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+        return api(originalRequest);
       }
-      
-      // Refresh failed, logout user
-      reset();
-      window.location.href = '/login';
+      useAuthStore.getState().reset();
+      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+        window.location.assign('/login');
+      }
+    } else if (isUnauthorized && originalRequest?._retry === true) {
+      useAuthStore.getState().reset();
     }
-    
-    // Format error response
-    const apiError: ApiError = {
-      status: error.response?.status || 500,
-      code: error.response?.data?.code || 'UNKNOWN_ERROR',
-      message: error.response?.data?.message || error.message || 'An unexpected error occurred',
-      details: error.response?.data?.details,
-    };
-    
-    return Promise.reject(apiError);
+    throw normalizeApiError(error);
   }
 );
 

@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
-import { PlusIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import { useState } from 'react';
+import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
+import { ArrowUpTrayIcon, MagnifyingGlassIcon, PlusIcon } from '@heroicons/react/24/outline';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -7,38 +8,69 @@ import { Modal, ConfirmModal } from '@/components/ui/Modal';
 import { UserTable } from '@/components/admin/UserTable';
 import { UserForm } from '@/components/admin/UserForm';
 import { EnrollmentModal } from '@/components/admin/EnrollmentModal';
+import { UserImportModal } from '@/components/admin/UserImportModal';
 import { Loading } from '@/components/ui/Loading';
 import { usersApi } from '@/services/users';
-import type { User, CreateUserRequest, UpdateUserRequest, UserListResponse } from '@/types/user';
+import type { User, CreateUserRequest, UpdateUserRequest } from '@/types/user';
+import { queryClient, queryKeys } from '@/lib/queryClient';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { useAuthStore } from '@/stores/authStore';
+import { ADMIN_ROLES } from '@/types/roles';
 
 export function UsersPage() {
-  const [users, setUsers] = useState<UserListResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const currentUser = useAuthStore((state) => state.user);
+  const canManageElevatedUsers =
+    currentUser !== null && ADMIN_ROLES.includes(currentUser.role);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search);
   const [page, setPage] = useState(1);
 
   // Modal states
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isEnrollOpen, setIsEnrollOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const loadUsers = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const data = await usersApi.list({ page, search, page_size: 10 });
-      setUsers(data);
-    } catch (error) {
-      console.error('Failed to load users:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [page, search]);
-
-  useEffect(() => {
-    loadUsers();
-  }, [loadUsers]);
+  const usersQuery = useQuery({
+    queryKey: queryKeys.users({
+      page,
+      page_size: 10,
+      search: debouncedSearch || undefined,
+    }),
+    queryFn: ({ signal }) =>
+      usersApi.list(
+        {
+          page,
+          page_size: 10,
+          search: debouncedSearch || undefined,
+        },
+        signal
+      ),
+    placeholderData: keepPreviousData,
+  });
+  const saveMutation = useMutation({
+    mutationFn: async (input: {
+      userId?: string;
+      data: CreateUserRequest | UpdateUserRequest;
+    }) => {
+      if (input.userId !== undefined) {
+        return usersApi.update(input.userId, input.data as UpdateUserRequest);
+      }
+      return usersApi.create(input.data as CreateUserRequest);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+  });
+  const deleteMutation = useMutation({
+    mutationFn: (userId: string) => usersApi.delete(userId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+  });
+  const users = usersQuery.data;
+  const isSubmitting = saveMutation.isPending || deleteMutation.isPending;
+  const actionError = deleteMutation.error;
 
   const handleSearch = (value: string) => {
     setSearch(value);
@@ -66,30 +98,20 @@ export function UsersPage() {
   };
 
   const handleFormSubmit = async (data: CreateUserRequest | UpdateUserRequest) => {
-    setIsSubmitting(true);
-    try {
-      if (selectedUser) {
-        await usersApi.update(selectedUser.id, data as UpdateUserRequest);
-      } else {
-        await usersApi.create(data as CreateUserRequest);
-      }
-      setIsFormOpen(false);
-      loadUsers();
-    } finally {
-      setIsSubmitting(false);
-    }
+    await saveMutation.mutateAsync({
+      userId: selectedUser?.id,
+      data,
+    });
+    setIsFormOpen(false);
   };
 
-  const handleConfirmDelete = async () => {
-    if (!selectedUser) return;
-    setIsSubmitting(true);
-    try {
-      await usersApi.delete(selectedUser.id);
-      setIsDeleteOpen(false);
-      loadUsers();
-    } finally {
-      setIsSubmitting(false);
+  const handleConfirmDelete = () => {
+    if (selectedUser === null) {
+      return;
     }
+    deleteMutation.mutate(selectedUser.id, {
+      onSuccess: () => setIsDeleteOpen(false),
+    });
   };
 
   return (
@@ -101,10 +123,28 @@ export function UsersPage() {
             <h1 className="text-2xl font-bold text-gray-900">Users</h1>
             <p className="text-gray-500 mt-1">Manage user accounts and face enrollments</p>
           </div>
-          <Button leftIcon={<PlusIcon className="w-5 h-5" />} onClick={handleCreate}>
-            Add User
-          </Button>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button
+              variant="secondary"
+              leftIcon={<ArrowUpTrayIcon className="h-5 w-5" aria-hidden="true" />}
+              onClick={() => setIsImportOpen(true)}
+            >
+              Import People
+            </Button>
+            <Button
+              leftIcon={<PlusIcon className="h-5 w-5" aria-hidden="true" />}
+              onClick={handleCreate}
+            >
+              Add User
+            </Button>
+          </div>
         </div>
+
+        {actionError !== null && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700" role="alert">
+            {actionError.message}
+          </div>
+        )}
 
         {/* Search and Filters */}
         <Card padding="sm">
@@ -126,9 +166,20 @@ export function UsersPage() {
 
         {/* Users Table */}
         <Card>
-          {isLoading ? (
+          {usersQuery.isPending ? (
             <div className="py-12">
               <Loading size="lg" text="Loading users..." />
+            </div>
+          ) : usersQuery.error !== null ? (
+            <div className="p-6 text-center text-red-700" role="alert">
+              <p>{usersQuery.error.message}</p>
+              <Button
+                variant="secondary"
+                className="mt-4"
+                onClick={() => void usersQuery.refetch()}
+              >
+                Try again
+              </Button>
             </div>
           ) : (
             <>
@@ -137,6 +188,7 @@ export function UsersPage() {
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 onEnrollFace={handleEnrollFace}
+                canManageElevatedUsers={canManageElevatedUsers}
               />
 
               {/* Pagination */}
@@ -179,6 +231,7 @@ export function UsersPage() {
       >
         <UserForm
           user={selectedUser || undefined}
+          canAssignElevatedRoles={canManageElevatedUsers}
           onSubmit={handleFormSubmit}
           onCancel={() => setIsFormOpen(false)}
           isLoading={isSubmitting}
@@ -202,7 +255,13 @@ export function UsersPage() {
         isOpen={isEnrollOpen}
         onClose={() => setIsEnrollOpen(false)}
         user={selectedUser}
-        onSuccess={loadUsers}
+        onSuccess={() => void queryClient.invalidateQueries({ queryKey: ['users'] })}
+      />
+
+      <UserImportModal
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        onSuccess={() => void queryClient.invalidateQueries({ queryKey: ['users'] })}
       />
     </>
   );

@@ -1,243 +1,108 @@
-import base64
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
 
 import httpx
+from fastapi import HTTPException, Request
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, ValidationError
 
-from app.core.config import settings
-from app.core.exceptions import FaceServiceError
+from app.core.images import image_media_type
+
+STABLE_FACE_CODES = {
+    "INVALID_IMAGE",
+    "NO_FACE",
+    "MULTIPLE_FACES",
+    "LOW_QUALITY",
+    "IMAGE_TOO_LARGE",
+    "UNSUPPORTED_MEDIA_TYPE",
+    "INFERENCE_BUSY",
+    "MODEL_UNAVAILABLE",
+    "INFERENCE_FAILED",
+}
+
+
+class FaceBoundingBox(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    x1: int
+    y1: int
+    x2: int
+    y2: int
+    confidence: float = Field(ge=0.0, le=1.0)
+
+
+class FaceAnalysis(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    embedding: list[FiniteFloat] = Field(min_length=512, max_length=512)
+    quality_score: float = Field(ge=0.0, le=1.0)
+    bbox: FaceBoundingBox
+    pad_live_score: float = Field(ge=0.0, le=1.0)
+
+
+@dataclass(slots=True)
+class FaceServiceError(Exception):
+    status_code: int
+    code: str
+    message: str
+
+
+def _service_error(response: httpx.Response) -> FaceServiceError:
+    code = "INFERENCE_FAILED"
+    message = "Face analysis failed"
+    try:
+        detail = response.json().get("detail")
+        if isinstance(detail, dict):
+            response_code = detail.get("code")
+            response_message = detail.get("message")
+            if isinstance(response_code, str) and response_code in STABLE_FACE_CODES:
+                code = response_code
+            if isinstance(response_message, str) and response_message:
+                message = response_message
+    except (ValueError, AttributeError):
+        pass
+    return FaceServiceError(response.status_code, code, message)
 
 
 class FaceServiceClient:
-    """Client for communicating with the face recognition service."""
+    def __init__(self, client: httpx.AsyncClient) -> None:
+        self._client = client
 
-    def __init__(
-        self,
-        base_url: Optional[str] = None,
-        timeout: Optional[int] = None
-    ):
-        self.base_url = base_url or settings.FACE_SERVICE_URL
-        self.timeout = timeout or settings.FACE_SERVICE_TIMEOUT
-
-    async def _make_request(
-        self,
-        method: str,
-        endpoint: str,
-        json_data: Optional[Dict[str, Any]] = None,
-        files: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
-        """Make an HTTP request to the face service."""
-        url = f"{self.base_url}{endpoint}"
-
+    async def analyze(self, image_bytes: bytes) -> FaceAnalysis:
+        media_type = image_media_type(image_bytes)
+        if media_type is None:
+            raise FaceServiceError(
+                415, "UNSUPPORTED_MEDIA_TYPE", "Only JPEG and PNG images are supported"
+            )
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                if files:
-                    response = await client.request(
-                        method=method,
-                        url=url,
-                        files=files
-                    )
-                else:
-                    response = await client.request(
-                        method=method,
-                        url=url,
-                        json=json_data
-                    )
-
-                if response.status_code >= 400:
-                    error_detail = response.json().get("detail", "Unknown error")
-                    raise FaceServiceError(
-                        message=f"Face service error: {error_detail}",
-                        code="FACE_SERVICE_REQUEST_ERROR",
-                        details={"status_code": response.status_code}
-                    )
-
-                return response.json()
-
-        except httpx.TimeoutException:
-            raise FaceServiceError(
-                message="Face service request timed out",
-                code="FACE_SERVICE_TIMEOUT"
+            response = await self._client.post(
+                "/api/v1/analyze",
+                files={"image": ("face", image_bytes, media_type)},
             )
-        except httpx.ConnectError:
+        except (httpx.TimeoutException, httpx.NetworkError) as exc:
             raise FaceServiceError(
-                message="Could not connect to face service",
-                code="FACE_SERVICE_UNAVAILABLE"
-            )
-        except FaceServiceError:
-            raise
-        except Exception as e:
-            raise FaceServiceError(
-                message=f"Face service error: {str(e)}",
-                code="FACE_SERVICE_ERROR"
-            )
-
-    async def generate_embedding(
-        self,
-        image_base64: str,
-        detect_faces: bool = True
-    ) -> Dict[str, Any]:
-        """
-        Generate face embedding from an image.
-        
-        Args:
-            image_base64: Base64 encoded image data
-            detect_faces: Whether to detect faces before embedding
-        
-        Returns:
-            Dict containing:
-                - embedding: List[float] - The face embedding vector
-                - face_count: int - Number of faces detected
-                - quality_score: float - Quality score of the face
-                - bounding_box: Dict - Face bounding box coordinates
-        
-        Raises:
-            FaceServiceError: If face service fails or no face detected
-        """
-        response = await self._make_request(
-            method="POST",
-            endpoint="/api/v1/embed",
-            json_data={
-                "image": image_base64,
-                "detect_faces": detect_faces
-            }
-        )
-
-        if not response.get("success", False):
-            raise FaceServiceError(
-                message=response.get("message", "Failed to generate embedding"),
-                code="EMBEDDING_GENERATION_FAILED"
-            )
-
-        return response
-
-    async def generate_embeddings_batch(
-        self,
-        images_base64: List[str]
-    ) -> List[Dict[str, Any]]:
-        """
-        Generate face embeddings for multiple images.
-        
-        Args:
-            images_base64: List of base64 encoded images
-        
-        Returns:
-            List of embedding results
-        """
-        response = await self._make_request(
-            method="POST",
-            endpoint="/api/v1/embed/batch",
-            json_data={
-                "images": images_base64
-            }
-        )
-
-        return response.get("results", [])
-
-    async def detect_liveness(
-        self,
-        image_base64: str,
-        threshold: Optional[float] = None
-    ) -> Dict[str, Any]:
-        """
-        Detect if the face in the image is from a live person.
-        
-        Args:
-            image_base64: Base64 encoded image data
-            threshold: Optional liveness threshold (0-1)
-        
-        Returns:
-            Dict containing:
-                - is_live: bool - Whether the face appears to be live
-                - confidence: float - Confidence score (0-1)
-                - details: Dict - Additional liveness detection details
-        
-        Raises:
-            FaceServiceError: If liveness detection fails
-        """
-        json_data = {"image": image_base64}
-        if threshold is not None:
-            json_data["threshold"] = threshold
-
-        response = await self._make_request(
-            method="POST",
-            endpoint="/api/v1/liveness",
-            json_data=json_data
-        )
-
-        if not response.get("success", False):
-            raise FaceServiceError(
-                message=response.get("message", "Liveness detection failed"),
-                code="LIVENESS_DETECTION_FAILED"
-            )
-
-        return response
-
-    async def detect_faces(
-        self,
-        image_base64: str,
-        return_landmarks: bool = False
-    ) -> Dict[str, Any]:
-        """
-        Detect faces in an image.
-        
-        Args:
-            image_base64: Base64 encoded image data
-            return_landmarks: Whether to return facial landmarks
-        
-        Returns:
-            Dict containing:
-                - faces: List[Dict] - Detected faces with bounding boxes
-                - count: int - Number of faces detected
-        """
-        response = await self._make_request(
-            method="POST",
-            endpoint="/api/v1/detect",
-            json_data={
-                "image": image_base64,
-                "return_landmarks": return_landmarks
-            }
-        )
-
-        return response
-
-    async def check_quality(
-        self,
-        image_base64: str
-    ) -> Dict[str, Any]:
-        """
-        Check the quality of a face image.
-        
-        Args:
-            image_base64: Base64 encoded image data
-        
-        Returns:
-            Dict containing:
-                - quality_score: float - Overall quality score (0-1)
-                - issues: List[str] - List of quality issues
-                - metrics: Dict - Detailed quality metrics
-        """
-        response = await self._make_request(
-            method="POST",
-            endpoint="/api/v1/detect",  # Quality is returned from detect endpoint
-            json_data={
-                "image": image_base64,
-                "return_quality": True
-            }
-        )
-
-        return {
-            "quality_score": response.get("quality_score", 0),
-            "issues": response.get("quality_issues", []),
-            "metrics": response.get("quality_metrics", {})
-        }
-
-    async def health_check(self) -> bool:
-        """Check if the face service is healthy."""
+                503, "MODEL_UNAVAILABLE", "Face analysis service is unavailable"
+            ) from exc
+        if response.status_code != 200:
+            raise _service_error(response)
         try:
-            response = await self._make_request(
-                method="GET",
-                endpoint="/health"
-            )
-            return response.get("status") == "healthy"
-        except FaceServiceError:
+            return FaceAnalysis.model_validate(response.json())
+        except (ValueError, ValidationError) as exc:
+            raise FaceServiceError(
+                500, "INFERENCE_FAILED", "Face analysis returned an invalid response"
+            ) from exc
+
+    async def ready(self) -> bool:
+        try:
+            response = await self._client.get("/health/ready")
+        except httpx.HTTPError:
             return False
+        return response.status_code == 200
+
+
+def get_face_client(request: Request) -> FaceServiceClient:
+    client = getattr(request.app.state, "face_client", None)
+    if not isinstance(client, FaceServiceClient):
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "MODEL_UNAVAILABLE", "message": "Face analysis service is unavailable"},
+        )
+    return client

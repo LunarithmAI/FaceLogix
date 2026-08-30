@@ -1,0 +1,32 @@
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["backend", "face_service"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "S", "SIM"]
+ignore = ["S101"]
+
+[tool.ruff.lint.per-file-ignores]
+"backend/alembic/versions/*.py" = ["E501", "I001"]
+"backend/tests/**/*.py" = ["S105", "S106"]
+"face_service/tests/**/*.py" = ["S105", "S106"]
+
+[tool.mypy]
+python_version = "3.11"
+plugins = ["pydantic.mypy"]
+strict = true
+warn_unreachable = true
+show_error_codes = true
+exclude = ["backend/alembic/versions"]
+
+[[tool.mypy.overrides]]
+module = ["cv2", "cv2.*", "onnx", "onnx.*", "onnxruntime", "onnxruntime.*", "pgvector", "pgvector.*", "skimage", "skimage.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+addopts = "--strict-config --strict-markers"
+asyncio_mode = "auto"
+testpaths = ["backend/tests", "face_service/tests"]
+markers = ["model: uses downloaded production ONNX models"]
+filterwarnings = ["error"]

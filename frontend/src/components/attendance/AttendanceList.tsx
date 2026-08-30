@@ -24,8 +24,8 @@ export function AttendanceList({
   if (isLoading) {
     return (
       <div className="animate-pulse space-y-3">
-        {[...Array(5)].map((_, i) => (
-          <div key={i} className="h-16 bg-gray-100 rounded-lg" />
+        {Array.from({ length: 5 }, (_, index) => (
+          <div key={index} className="h-16 bg-gray-100 rounded-lg" />
         ))}
       </div>
     );
@@ -40,7 +40,7 @@ export function AttendanceList({
   }
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500" role="region" aria-label="Attendance records table" tabIndex={0}>
       <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>

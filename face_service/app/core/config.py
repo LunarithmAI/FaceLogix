@@ -1,86 +1,39 @@
-"""
-Configuration settings for the Face Recognition Service.
-
-Uses pydantic-settings for environment variable management with sensible defaults.
-"""
-
 from functools import lru_cache
 from pathlib import Path
-from typing import List, Tuple
+from typing import Literal
 
-from pydantic_settings import BaseSettings
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """
-    Application settings loaded from environment variables.
-    
-    Attributes:
-        SERVICE_NAME: Name of the service for identification
-        DEBUG: Enable debug mode
-        LOG_LEVEL: Logging level
-        MODELS_DIR: Directory containing ONNX model files
-        DETECTOR_MODEL: Filename of the face detector model
-        EMBEDDER_MODEL: Filename of the face embedder model
-        DETECTION_THRESHOLD: Minimum confidence for face detection
-        MIN_FACE_SIZE: Minimum face size in pixels
-        MAX_FACES: Maximum number of faces to detect
-        EMBEDDING_SIZE: Dimension of face embeddings
-        INPUT_SIZE: Input size for face alignment (width, height)
-        LIVENESS_MOVEMENT_THRESHOLD: Movement threshold for liveness detection
-        LIVENESS_MIN_FRAMES: Minimum frames required for liveness check
-        MIN_QUALITY_SCORE: Minimum quality score for embedding generation
-        ONNX_PROVIDERS: List of ONNX execution providers
-    """
-    
-    # Service configuration
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        case_sensitive=True,
+    )
+
     SERVICE_NAME: str = "face-recognition-service"
-    DEBUG: bool = False
-    LOG_LEVEL: str = "INFO"
-    
-    # Model paths
+    LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     MODELS_DIR: Path = Path("models")
-    DETECTOR_MODEL: str = "det_10g.onnx"
-    EMBEDDER_MODEL: str = "w600k_r50.onnx"
-    
-    # Detection settings
-    DETECTION_THRESHOLD: float = 0.5
-    MIN_FACE_SIZE: int = 50
-    MAX_FACES: int = 10
-    
-    # Face detection/recognition thresholds (from env)
-    FACE_DETECTION_THRESHOLD: float = 0.5
-    FACE_RECOGNITION_THRESHOLD: float = 0.75
-    MAX_FACES_PER_IMAGE: int = 10
-    
-    # Embedding settings
-    EMBEDDING_SIZE: int = 512
-    INPUT_SIZE: Tuple[int, int] = (112, 112)
-    
-    # Liveness settings
-    LIVENESS_MOVEMENT_THRESHOLD: float = 0.02
-    LIVENESS_MIN_FRAMES: int = 2
-    
-    # Quality settings
-    MIN_QUALITY_SCORE: float = 0.3
-    
-    # Performance / ONNX runtime
-    ONNX_PROVIDERS: List[str] = ["CPUExecutionProvider"]
-    
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        extra = "ignore"
+
+    DETECTION_THRESHOLD: float = Field(default=0.5, ge=0.0, le=1.0)
+    MIN_FACE_SIZE: int = Field(default=50, ge=1, le=4096)
+    MAX_FACES: int = Field(default=10, ge=2, le=100)
+    MIN_QUALITY_SCORE: float = Field(default=0.3, ge=0.0, le=1.0)
+    ONNX_PROVIDERS: list[str] = Field(default_factory=lambda: ["CPUExecutionProvider"])
+
+    MAX_UPLOAD_BYTES: int = Field(default=10 * 1024 * 1024, ge=1)
+    MAX_IMAGE_DIMENSION: int = Field(default=4096, ge=1, le=16384)
+    MAX_IMAGE_PIXELS: int = Field(default=16_777_216, ge=1)
+    MAX_CONCURRENT_INFERENCES: int = Field(default=1, ge=1, le=32)
+    ORT_INTRA_OP_THREADS: int = Field(default=2, ge=1, le=64)
+    ORT_INTER_OP_THREADS: int = Field(default=1, ge=1, le=64)
 
 
 @lru_cache
 def get_settings() -> Settings:
-    """
-    Get cached settings instance.
-    
-    Returns:
-        Settings: Application settings singleton
-    """
     return Settings()
 
 

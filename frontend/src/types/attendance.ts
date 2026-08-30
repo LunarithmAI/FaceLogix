@@ -1,10 +1,30 @@
 export type CheckType = 'check_in' | 'check_out';
 
-// Frontend display status (mapped from backend)
-export type CheckStatus = 'success' | 'failed' | 'already_checked' | 'not_recognized' | 'no_face_detected';
+export type CheckStatus =
+  | 'success'
+  | 'failed'
+  | 'not_recognized'
+  | 'invalid_image'
+  | 'spoof_detected'
+  | 'multiple_faces'
+  | 'low_quality'
+  | 'no_face_detected'
+  | 'already_checked_in'
+  | 'not_checked_in'
+  | 'already_checked_out';
 
-// Backend response status values
-export type BackendCheckStatus = 'on_time' | 'late' | 'unknown_user' | 'already_checked_in' | 'no_face_detected';
+export type BackendCheckStatus =
+  | 'on_time'
+  | 'late'
+  | 'unknown_user'
+  | 'invalid_image'
+  | 'spoof_detected'
+  | 'multiple_faces'
+  | 'low_quality'
+  | 'no_face_detected'
+  | 'already_checked_in'
+  | 'not_checked_in'
+  | 'already_checked_out';
 
 // Raw response from backend
 export interface BackendCheckInResponse {
@@ -45,47 +65,55 @@ export interface AttendanceLog {
 
 export interface DailySummary {
   date: string;
-  total_employees: number;
-  total_users?: number;
+  total_users: number;
   checked_in: number;
-  checked_out?: number;
+  on_time: number;
+  late: number;
   absent: number;
-  late_arrivals?: number;
-  on_time?: number;
-  late?: number;
-  early_departures?: number;
-  average_check_in_time?: string;
-  average_check_out_time?: string;
-  unknown_attempts?: number;
-  // Computed/display fields
-  total_check_ins?: number;
-  total_check_outs?: number;
-  on_time_count?: number;
-  late_count?: number;
-  on_time_percentage?: number;
+  unknown_attempts: number;
 }
 
-export interface AttendanceStats {
-  today: DailySummary;
-  weekly: {
-    present_days: number;
-    absent_days: number;
-    total_hours: number;
-    average_hours_per_day: number;
-  };
-  monthly: {
-    present_days: number;
-    absent_days: number;
-    total_hours: number;
-    on_time_percentage: number;
-  };
+export interface ReportDailySummary {
+  date: string;
+  total_users: number;
+  check_ins: number;
+  check_outs: number;
+  on_time: number;
+  late: number;
+  absent: number;
+  unknown_attempts: number;
+  on_time_percentage: number;
 }
+
+export interface UserAttendanceStats {
+  user_id: string;
+  user_name: string;
+  period: {
+    from_date: string;
+    to_date: string;
+    working_days: number;
+  };
+  summary: {
+    on_time: number;
+    late: number;
+    absent: number;
+    total_check_ins: number;
+  };
+  rates: {
+    attendance_rate: number;
+    punctuality_rate: number;
+  };
+  average_check_in_time: string | null;
+}
+
 
 export interface AttendanceListParams {
   page?: number;
-  limit?: number;
-  start_date?: string;
-  end_date?: string;
+  page_size?: number;
+  from_date?: string;
+  to_date?: string;
   user_id?: string;
-  check_type?: CheckType;
+  device_id?: string;
+  status?: string;
+  type?: CheckType;
 }

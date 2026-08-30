@@ -1,4 +1,5 @@
-import { ReactNode } from 'react';
+import type { ReactNode } from 'react';
+import type { UserRole } from '@/types/roles';
 
 type BadgeVariant = 'default' | 'primary' | 'success' | 'warning' | 'danger' | 'info';
 type BadgeSize = 'sm' | 'md' | 'lg';
@@ -78,14 +79,15 @@ export function StatusBadge({ status }: { status: 'active' | 'inactive' | 'pendi
   );
 }
 
-export function RoleBadge({ role }: { role: 'admin' | 'manager' | 'member' }) {
-  const config = {
-    admin: { variant: 'danger' as const, label: 'Admin' },
-    manager: { variant: 'primary' as const, label: 'Manager' },
-    member: { variant: 'default' as const, label: 'Member' },
+export function RoleBadge({ role }: { role: UserRole }) {
+  const config: Record<UserRole, { variant: BadgeVariant; label: string }> = {
+    super_admin: { variant: 'danger', label: 'Super Admin' },
+    admin: { variant: 'danger', label: 'Admin' },
+    manager: { variant: 'primary', label: 'Manager' },
+    member: { variant: 'default', label: 'Member' },
   };
 
-  const { variant, label } = config[role] || { variant: 'default' as const, label: role };
+  const { variant, label } = config[role];
 
   return <Badge variant={variant}>{label}</Badge>;
 }

@@ -1,13 +1,13 @@
 import api from './api';
-import type { Device, DeviceRegistration, DeviceSettings, DeviceStatus } from '@/types/device';
+import type { Device, DeviceCredential, DeviceRegistration, DeviceType } from '@/types/device';
 
 const DEVICES_BASE = '/devices';
 
 export interface DeviceListParams {
   page?: number;
-  limit?: number;
-  status?: DeviceStatus;
-  type?: string;
+  page_size?: number;
+  is_active?: boolean;
+  device_type?: DeviceType;
   search?: string;
 }
 
@@ -15,81 +15,37 @@ export interface DeviceListResponse {
   items: Device[];
   total: number;
   page: number;
-  limit: number;
+  page_size: number;
   pages: number;
 }
 
 export const devicesApi = {
-  /**
-   * Get paginated list of devices
-   */
-  async list(params: DeviceListParams = {}): Promise<DeviceListResponse> {
-    const response = await api.get<DeviceListResponse>(DEVICES_BASE, { params });
+  async list(params: DeviceListParams = {}, signal?: AbortSignal): Promise<DeviceListResponse> {
+    const response = await api.get<DeviceListResponse>(DEVICES_BASE, { params, signal });
     return response.data;
   },
 
-  /**
-   * Get a single device by ID
-   */
-  async get(deviceId: string): Promise<Device> {
-    const response = await api.get<Device>(`${DEVICES_BASE}/${deviceId}`);
+  async register(data: DeviceRegistration): Promise<DeviceCredential> {
+    const response = await api.post<DeviceCredential>(DEVICES_BASE, data);
     return response.data;
   },
 
-  /**
-   * Register a new device
-   */
-  async register(data: DeviceRegistration): Promise<Device> {
-    const response = await api.post<Device>(DEVICES_BASE, data);
-    return response.data;
-  },
-
-  /**
-   * Update device details
-   */
   async update(deviceId: string, data: Partial<DeviceRegistration>): Promise<Device> {
     const response = await api.patch<Device>(`${DEVICES_BASE}/${deviceId}`, data);
     return response.data;
   },
 
-  /**
-   * Delete a device
-   */
   async delete(deviceId: string): Promise<void> {
     await api.delete(`${DEVICES_BASE}/${deviceId}`);
   },
 
-  /**
-   * Activate a device
-   */
   async activate(deviceId: string): Promise<Device> {
     const response = await api.post<Device>(`${DEVICES_BASE}/${deviceId}/activate`);
     return response.data;
   },
 
-  /**
-   * Deactivate a device
-   */
   async deactivate(deviceId: string): Promise<Device> {
     const response = await api.post<Device>(`${DEVICES_BASE}/${deviceId}/deactivate`);
-    return response.data;
-  },
-
-  /**
-   * Update device settings
-   */
-  async updateSettings(deviceId: string, settings: DeviceSettings): Promise<Device> {
-    const response = await api.patch<Device>(`${DEVICES_BASE}/${deviceId}/settings`, settings);
-    return response.data;
-  },
-
-  /**
-   * Get device heartbeat/status
-   */
-  async heartbeat(deviceId: string): Promise<{ status: string; last_active_at: string }> {
-    const response = await api.post<{ status: string; last_active_at: string }>(
-      `${DEVICES_BASE}/${deviceId}/heartbeat`
-    );
     return response.data;
   },
 };

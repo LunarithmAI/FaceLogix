@@ -1,16 +1,25 @@
-import { useState, FormEvent } from 'react';
+import { useState } from 'react';
+import type { FormEvent } from 'react';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import type { User, CreateUserRequest, UpdateUserRequest, UserRole } from '@/types/user';
+import type { User, CreateUserRequest, UpdateUserRequest } from '@/types/user';
+import type { UserRole } from '@/types/roles';
 
 interface UserFormProps {
   user?: User;
   onSubmit: (data: CreateUserRequest | UpdateUserRequest) => Promise<void>;
   onCancel: () => void;
+  canAssignElevatedRoles: boolean;
   isLoading?: boolean;
 }
 
-export function UserForm({ user, onSubmit, onCancel, isLoading = false }: UserFormProps) {
+export function UserForm({
+  user,
+  onSubmit,
+  onCancel,
+  canAssignElevatedRoles,
+  isLoading = false,
+}: UserFormProps) {
   const [formData, setFormData] = useState({
     email: user?.email || '',
     name: user?.name || '',
@@ -67,7 +76,7 @@ export function UserForm({ user, onSubmit, onCancel, isLoading = false }: UserFo
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={(event) => void handleSubmit(event)} className="space-y-4">
       {errors.submit && (
         <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
           {errors.submit}
@@ -104,15 +113,17 @@ export function UserForm({ user, onSubmit, onCancel, isLoading = false }: UserFo
       )}
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+        <label htmlFor="user-role" className="block text-sm font-medium text-gray-700 mb-1">Role</label>
         <select
+          id="user-role"
           value={formData.role}
           onChange={(e) => setFormData({ ...formData, role: e.target.value as UserRole })}
           className="block w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
         >
           <option value="member">Member</option>
-          <option value="manager">Manager</option>
-          <option value="admin">Admin</option>
+          {canAssignElevatedRoles && <option value="manager">Manager</option>}
+          {canAssignElevatedRoles && <option value="admin">Admin</option>}
+          {canAssignElevatedRoles && <option value="super_admin">Super Admin</option>}
         </select>
       </div>
 

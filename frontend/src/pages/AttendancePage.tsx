@@ -1,83 +1,71 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
+import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
 import { ArrowDownTrayIcon, FunnelIcon } from '@heroicons/react/24/outline';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { AttendanceList } from '@/components/attendance/AttendanceList';
 import { Loading } from '@/components/ui/Loading';
-import { reportsApi, type AttendanceListResponse } from '@/services/reports';
-import type { AttendanceListParams, CheckType } from '@/types/attendance';
+import { reportsApi } from '@/services/reports';
+import type { CheckType } from '@/types/attendance';
+import { queryKeys } from '@/lib/queryClient';
 import { formatApiDate } from '@/utils/date';
 
 export function AttendancePage() {
-  const [logs, setLogs] = useState<AttendanceListResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isExporting, setIsExporting] = useState(false);
   const [page, setPage] = useState(1);
-
-  // Filters
-  const [startDate, setStartDate] = useState(() => {
-    const date = new Date();
-    date.setDate(date.getDate() - 7);
-    return formatApiDate(date);
+  const [draftFilters, setDraftFilters] = useState(() => {
+    const fromDate = new Date();
+    fromDate.setDate(fromDate.getDate() - 7);
+    return {
+      from_date: formatApiDate(fromDate),
+      to_date: formatApiDate(new Date()),
+      type: '' as CheckType | '',
+    };
   });
-  const [endDate, setEndDate] = useState(() => formatApiDate(new Date()));
-  const [checkType, setCheckType] = useState<CheckType | ''>('');
+  const [appliedFilters, setAppliedFilters] = useState(draftFilters);
   const [showFilters, setShowFilters] = useState(false);
 
-  const loadLogs = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const params: AttendanceListParams = {
-        page,
-        limit: 20,
-        start_date: startDate,
-        end_date: endDate,
-      };
-      if (checkType) {
-        params.check_type = checkType;
-      }
-      const data = await reportsApi.getAttendanceLogs(params);
-      setLogs(data);
-    } catch (error) {
-      console.error('Failed to load attendance logs:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [page, startDate, endDate, checkType]);
-
-  useEffect(() => {
-    loadLogs();
-  }, [loadLogs]);
-
-  const handleExport = async () => {
-    try {
-      setIsExporting(true);
-      const blob = await reportsApi.exportReport({
-        start_date: startDate,
-        end_date: endDate,
+  const attendanceQuery = useQuery({
+    queryKey: queryKeys.attendance({
+      ...appliedFilters,
+      page,
+      page_size: 20,
+    }),
+    queryFn: ({ signal }) =>
+      reportsApi.getAttendanceLogs(
+        {
+          ...appliedFilters,
+          type: appliedFilters.type || undefined,
+          page,
+          page_size: 20,
+        },
+        signal
+      ),
+    placeholderData: keepPreviousData,
+  });
+  const exportMutation = useMutation({
+    mutationFn: () =>
+      reportsApi.exportReport({
+        from_date: appliedFilters.from_date,
+        to_date: appliedFilters.to_date,
         format: 'csv',
-      });
-
-      // Download file
+      }),
+    onSuccess: (blob) => {
       const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `attendance_${startDate}_${endDate}.csv`;
-      document.body.appendChild(a);
-      a.click();
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `attendance_${appliedFilters.from_date}_${appliedFilters.to_date}.csv`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
       window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (error) {
-      console.error('Failed to export:', error);
-    } finally {
-      setIsExporting(false);
-    }
-  };
+    },
+  });
+  const logs = attendanceQuery.data;
 
   const handleApplyFilters = () => {
+    setAppliedFilters(draftFilters);
     setPage(1);
-    loadLogs();
   };
 
   return (
@@ -99,13 +87,19 @@ export function AttendancePage() {
             <Button
               variant="secondary"
               leftIcon={<ArrowDownTrayIcon className="w-5 h-5" />}
-              onClick={handleExport}
-              isLoading={isExporting}
+              onClick={() => exportMutation.mutate()}
+              isLoading={exportMutation.isPending}
             >
               Export
             </Button>
           </div>
         </div>
+
+        {exportMutation.error !== null && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700" role="alert">
+            {exportMutation.error.message}
+          </div>
+        )}
 
         {/* Filters */}
         {showFilters && (
@@ -114,22 +108,32 @@ export function AttendancePage() {
               <Input
                 label="Start Date"
                 type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                value={draftFilters.from_date}
+                onChange={(event) =>
+                  setDraftFilters({ ...draftFilters, from_date: event.target.value })
+                }
               />
               <Input
                 label="End Date"
                 type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
+                value={draftFilters.to_date}
+                onChange={(event) =>
+                  setDraftFilters({ ...draftFilters, to_date: event.target.value })
+                }
               />
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="attendance-check-type" className="block text-sm font-medium text-gray-700 mb-1">
                   Check Type
                 </label>
                 <select
-                  value={checkType}
-                  onChange={(e) => setCheckType(e.target.value as CheckType | '')}
+                  id="attendance-check-type"
+                  value={draftFilters.type}
+                  onChange={(event) =>
+                    setDraftFilters({
+                      ...draftFilters,
+                      type: event.target.value as CheckType | '',
+                    })
+                  }
                   className="block w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 >
                   <option value="">All</option>
@@ -148,9 +152,20 @@ export function AttendancePage() {
 
         {/* Attendance Table */}
         <Card>
-          {isLoading ? (
+          {attendanceQuery.isPending ? (
             <div className="py-12">
               <Loading size="lg" text="Loading attendance logs..." />
+            </div>
+          ) : attendanceQuery.error !== null ? (
+            <div className="p-6 text-center text-red-700" role="alert">
+              <p>{attendanceQuery.error.message}</p>
+              <Button
+                variant="secondary"
+                className="mt-4"
+                onClick={() => void attendanceQuery.refetch()}
+              >
+                Try again
+              </Button>
             </div>
           ) : (
             <>

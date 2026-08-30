@@ -1,159 +1,122 @@
-import { useState, FormEvent } from 'react';
-import { useNavigate, useLocation } from 'react-router';
+import { useState } from 'react';
+import type { FormEvent } from 'react';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
+import { useLocation, useNavigate } from 'react-router';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { Input } from '@/components/ui/Input';
 import { useAuthStore } from '@/stores/authStore';
 
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { login, isLoading, error, clearError } = useAuthStore();
-
+  const [organization, setOrganization] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const locationState: unknown = location.state;
+  const returnLocation =
+    typeof locationState === 'object' &&
+    locationState !== null &&
+    'from' in locationState &&
+    typeof locationState.from === 'object' &&
+    locationState.from !== null &&
+    'pathname' in locationState.from &&
+    typeof locationState.from.pathname === 'string'
+      ? locationState.from.pathname
+      : '/';
 
-  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/';
-
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
     clearError();
-
     try {
-      await login({ email, password });
-      navigate(from, { replace: true });
+      await login({ organization, email, password });
+      void navigate(returnLocation, { replace: true });
     } catch {
-      // Error is handled by the store
+      // The auth store exposes the normalized error below the form heading.
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-500 to-primary-700 px-4 py-12">
+    <main className="flex min-h-screen items-center justify-center bg-primary-700 px-4 py-12">
       <div className="w-full max-w-md">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">FaceLogix</h1>
+        <div className="mb-8 text-center">
+          <h1 className="mb-2 text-4xl font-bold text-white">FaceLogix</h1>
           <p className="text-primary-100">Face Recognition Attendance System</p>
         </div>
 
-        {/* Login Card */}
-        <div className="card animate-fade-in">
-          <h2 className="text-2xl font-semibold text-gray-900 mb-6">
-            Sign in to your account
-          </h2>
+        <Card className="motion-safe:animate-fade-in">
+          <h2 className="mb-6 text-2xl font-semibold text-gray-900">Sign in to your account</h2>
 
-          {error && (
-            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          {error !== null && (
+            <div
+              className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+              role="alert"
+            >
               {error}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label htmlFor="email" className="label">
-                Email address
-              </label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="input"
-                placeholder="you@example.com"
+          <form onSubmit={(event) => void handleSubmit(event)} className="space-y-5">
+            <Input
+              label="Organization"
+              type="text"
+              value={organization}
+              onChange={(event) => setOrganization(event.target.value)}
+              placeholder="your-workspace"
+              required
+              autoComplete="organization"
+              autoFocus
+            />
+            <Input
+              label="Email address"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="you@example.com"
+              required
+              autoComplete="email"
+            />
+
+            <div className="relative">
+              <Input
+                label="Password"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                className="pr-12"
+                placeholder="Enter your password"
                 required
-                autoComplete="email"
-                autoFocus
+                autoComplete="current-password"
               />
-            </div>
-
-            <div>
-              <label htmlFor="password" className="label">
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="input pr-10"
-                  placeholder="Enter your password"
-                  required
-                  autoComplete="current-password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
-                >
-                  {showPassword ? (
-                    <EyeSlashIcon className="w-5 h-5" />
-                  ) : (
-                    <EyeIcon className="w-5 h-5" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                />
-                <span className="ml-2 text-sm text-gray-600">Remember me</span>
-              </label>
-              <a
-                href="#"
-                className="text-sm text-primary-600 hover:text-primary-500"
+              <button
+                type="button"
+                onClick={() => setShowPassword((visible) => !visible)}
+                className="absolute bottom-0 right-0 flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-500 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
               >
-                Forgot password?
-              </a>
+                {showPassword ? (
+                  <EyeSlashIcon className="h-5 w-5" aria-hidden="true" />
+                ) : (
+                  <EyeIcon className="h-5 w-5" aria-hidden="true" />
+                )}
+              </button>
             </div>
 
-            <button
+            <Button
               type="submit"
-              disabled={isLoading}
-              className="btn-primary w-full btn-lg"
+              className="w-full"
+              size="lg"
+              isLoading={isLoading}
+              loadingText="Signing in"
             >
-              {isLoading ? (
-                <span className="flex items-center justify-center">
-                  <svg
-                    className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    />
-                  </svg>
-                  Signing in...
-                </span>
-              ) : (
-                'Sign in'
-              )}
-            </button>
+              Sign in
+            </Button>
           </form>
-        </div>
-
-        {/* Footer */}
-        <p className="mt-8 text-center text-sm text-primary-100">
-          Need help?{' '}
-          <a href="#" className="text-white hover:underline">
-            Contact support
-          </a>
-        </p>
+        </Card>
       </div>
-    </div>
+    </main>
   );
 }
 

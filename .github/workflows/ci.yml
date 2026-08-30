@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16@sha256:eac621400b7b7ff52493883e41e930e3d104695fea5b68cc0c42370cf7880067
+        env:
+          POSTGRES_USER: facelogix_test
+          POSTGRES_PASSWORD: facelogix_test
+          POSTGRES_DB: facelogix_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U facelogix_test -d facelogix_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      ENVIRONMENT: test
+      DATABASE_URL: postgresql+asyncpg://facelogix_test:facelogix_test@localhost:5432/facelogix_test
+      JWT_SECRET_KEY: 0123456789abcdef0123456789abcdef
+      DEVICE_TOKEN_SECRET: abcdef0123456789abcdef0123456789
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11", cache: pip }
+      - run: python -m pip install --require-hashes -r backend/requirements-dev.txt
+      - run: cd backend && alembic upgrade head && alembic check && pytest -q && ruff check app tests && mypy app tests
+      - run: python -m pip install --require-hashes -r face_service/requirements-dev.txt
+      - run: cd face_service && pytest -q -m "not model" && ruff check app tests download_models.py && mypy app tests download_models.py
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20", cache: npm, cache-dependency-path: frontend/package-lock.json }
+      - run: cd frontend && npm ci
+      - run: cd frontend && npm run lint && npm run typecheck && npm run test:run && npm run build
+
+  infrastructure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash -n scripts/*.sh
+      - run: docker compose --env-file docker/.env.example -f docker/docker-compose.test.yml config
+      - run: docker compose --env-file docker/.env.example -f docker/docker-compose.infra.yml config
+      - run: docker compose --env-file docker/.env.example -f docker/docker-compose.dev.yml config
+      - run: docker compose --env-file docker/.env.example -f docker/docker-compose.yml config
+      - run: docker compose --env-file docker/.env.example -f docker/docker-compose.yml build backend face-service model-init edge

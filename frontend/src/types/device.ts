@@ -1,20 +1,4 @@
-export type DeviceStatus = 'active' | 'inactive' | 'pending';
-
-export type DeviceType = 'kiosk' | 'mobile' | 'web';
-
-export interface Device {
-  id: string;
-  name: string;
-  type: DeviceType;
-  status: DeviceStatus;
-  organization_id: string;
-  location?: string;
-  last_active_at?: string;
-  registered_at: string;
-  ip_address?: string;
-  user_agent?: string;
-  settings?: DeviceSettings;
-}
+export type DeviceType = 'kiosk' | 'tablet' | 'mobile' | 'web';
 
 export interface DeviceSettings {
   camera_facing?: 'user' | 'environment';
@@ -23,12 +7,31 @@ export interface DeviceSettings {
   require_liveness?: boolean;
   allow_check_in?: boolean;
   allow_check_out?: boolean;
+  [key: string]: unknown;
+}
+
+export interface Device {
+  id: string;
+  org_id: string;
+  name: string;
+  location: string | null;
+  device_type: DeviceType;
+  is_active: boolean;
+  last_seen_at: string | null;
+  settings: DeviceSettings;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DeviceCredential extends Device {
+  device_secret: string;
 }
 
 export interface DeviceRegistration {
   name: string;
-  type: DeviceType;
+  device_type: DeviceType;
   location?: string;
+  settings?: DeviceSettings;
 }
 
 export interface DeviceInfo {

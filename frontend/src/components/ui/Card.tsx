@@ -1,4 +1,5 @@
-import { HTMLAttributes, forwardRef } from 'react';
+import { forwardRef } from 'react';
+import type { HTMLAttributes } from 'react';
 
 interface CardProps extends HTMLAttributes<HTMLDivElement> {
   hoverable?: boolean;
@@ -8,8 +9,8 @@ interface CardProps extends HTMLAttributes<HTMLDivElement> {
 const paddingStyles = {
   none: '',
   sm: 'p-4',
-  md: 'p-6',
-  lg: 'p-8',
+  md: 'p-4 sm:p-6',
+  lg: 'p-6 sm:p-8',
 };
 
 export const Card = forwardRef<HTMLDivElement, CardProps>(
@@ -18,9 +19,9 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
       <div
         ref={ref}
         className={`
-          bg-white rounded-xl shadow-sm border border-gray-100
+          rounded-xl border border-border bg-surface shadow-sm
           ${paddingStyles[padding]}
-          ${hoverable ? 'hover:shadow-md transition-shadow duration-200' : ''}
+          ${hoverable ? 'transition-shadow duration-200 hover:shadow-md motion-reduce:transition-none' : ''}
           ${className}
         `}
         {...props}
@@ -33,7 +34,7 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
 
 Card.displayName = 'Card';
 
-interface CardHeaderProps extends HTMLAttributes<HTMLDivElement> {}
+type CardHeaderProps = HTMLAttributes<HTMLDivElement>;
 
 export const CardHeader = forwardRef<HTMLDivElement, CardHeaderProps>(
   ({ className = '', children, ...props }, ref) => {
@@ -51,7 +52,7 @@ export const CardHeader = forwardRef<HTMLDivElement, CardHeaderProps>(
 
 CardHeader.displayName = 'CardHeader';
 
-interface CardTitleProps extends HTMLAttributes<HTMLHeadingElement> {}
+type CardTitleProps = HTMLAttributes<HTMLHeadingElement>;
 
 export const CardTitle = forwardRef<HTMLHeadingElement, CardTitleProps>(
   ({ className = '', children, ...props }, ref) => {
@@ -69,7 +70,7 @@ export const CardTitle = forwardRef<HTMLHeadingElement, CardTitleProps>(
 
 CardTitle.displayName = 'CardTitle';
 
-interface CardContentProps extends HTMLAttributes<HTMLDivElement> {}
+type CardContentProps = HTMLAttributes<HTMLDivElement>;
 
 export const CardContent = forwardRef<HTMLDivElement, CardContentProps>(
   ({ className = '', children, ...props }, ref) => {
@@ -83,7 +84,7 @@ export const CardContent = forwardRef<HTMLDivElement, CardContentProps>(
 
 CardContent.displayName = 'CardContent';
 
-interface CardFooterProps extends HTMLAttributes<HTMLDivElement> {}
+type CardFooterProps = HTMLAttributes<HTMLDivElement>;
 
 export const CardFooter = forwardRef<HTMLDivElement, CardFooterProps>(
   ({ className = '', children, ...props }, ref) => {

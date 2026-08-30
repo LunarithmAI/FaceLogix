@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Cog6ToothIcon,
   BuildingOfficeIcon,
@@ -14,7 +15,9 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Loading } from '@/components/ui/Loading';
 import { useAuthStore } from '@/stores/authStore';
-import { settingsApi, type OrgSettings, type OrgSettingsUpdate, type SystemInfo } from '@/services/settings';
+import { settingsApi, type OrgSettingsUpdate } from '@/services/settings';
+import { queryKeys } from '@/lib/queryClient';
+import { ADMIN_ROLES } from '@/types/roles';
 
 // Timezone options
 const TIMEZONES = [
@@ -33,15 +36,11 @@ const TIMEZONES = [
 
 export function SettingsPage() {
   const { user } = useAuthStore();
-  const isAdmin = user?.role === 'admin';
-
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const isAdmin = user !== null && ADMIN_ROLES.includes(user.role);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-
-  const [orgSettings, setOrgSettings] = useState<OrgSettings | null>(null);
-  const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
+  const [isFormInitialized, setIsFormInitialized] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState<OrgSettingsUpdate>({
@@ -52,70 +51,66 @@ export function SettingsPage() {
       work_end_time: '17:00',
       late_threshold_minutes: 15,
       require_liveness: true,
-      allow_remote_checkin: false,
-      face_match_threshold: 0.6,
+      liveness_threshold: 0.8,
+      face_match_threshold: 0.75,
     },
   });
 
+  const orgQuery = useQuery({
+    queryKey: queryKeys.settings,
+    queryFn: ({ signal }) => settingsApi.getOrgSettings(signal),
+  });
+  const systemQuery = useQuery({
+    queryKey: queryKeys.system,
+    queryFn: ({ signal }) => settingsApi.getSystemInfo(signal),
+  });
+  const saveMutation = useMutation({
+    mutationFn: settingsApi.updateOrgSettings,
+    onMutate: () => {
+      setActionError(null);
+      setSuccessMessage(null);
+    },
+    onSuccess: (updated) => {
+      queryClient.setQueryData(queryKeys.settings, updated);
+      setSuccessMessage('Settings saved successfully');
+    },
+    onError: (error) => {
+      setActionError(error.message);
+    },
+  });
+  const testMutation = useMutation({
+    mutationFn: settingsApi.testFaceService,
+    onMutate: () => {
+      setActionError(null);
+      setSuccessMessage(null);
+    },
+    onSuccess: (result) => {
+      setSuccessMessage(`Face service is online (latency: ${result.latency_ms}ms)`);
+    },
+    onError: () => {
+      setActionError('Face service is not responding');
+    },
+  });
+  const orgSettings = orgQuery.data ?? null;
+  const systemInfo = systemQuery.data ?? null;
+  const queryError = orgQuery.error ?? systemQuery.error;
+  const error = actionError ?? queryError?.message ?? null;
+
   useEffect(() => {
-    loadSettings();
-  }, []);
-
-  const loadSettings = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      const [org, system] = await Promise.all([
-        settingsApi.getOrgSettings().catch(() => null),
-        settingsApi.getSystemInfo().catch(() => null),
-      ]);
-
-      if (org) {
-        setOrgSettings(org);
-        setFormData({
-          name: org.name,
-          timezone: org.timezone,
-          settings: {
-            work_start_time: org.settings?.work_start_time || '09:00',
-            work_end_time: org.settings?.work_end_time || '17:00',
-            late_threshold_minutes: org.settings?.late_threshold_minutes || 15,
-            require_liveness: org.settings?.require_liveness ?? true,
-            allow_remote_checkin: org.settings?.allow_remote_checkin ?? false,
-            face_match_threshold: org.settings?.face_match_threshold || 0.6,
-          },
-        });
-      }
-
-      setSystemInfo(system);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load settings');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSave = async () => {
-    if (!isAdmin) {
-      setError('Only administrators can modify settings');
+    if (orgSettings === null) {
       return;
     }
+    setFormData({
+      name: orgSettings.name,
+      timezone: orgSettings.timezone,
+      settings: { ...orgSettings.settings },
+    });
+    setIsFormInitialized(true);
+  }, [orgSettings]);
 
-    try {
-      setIsSaving(true);
-      setError(null);
-      setSuccessMessage(null);
-
-      const updated = await settingsApi.updateOrgSettings(formData);
-      setOrgSettings(updated);
-      setSuccessMessage('Settings saved successfully');
-
-      // Clear success message after 3 seconds
-      setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save settings');
-    } finally {
-      setIsSaving(false);
+  const handleSave = () => {
+    if (isAdmin) {
+      saveMutation.mutate(formData);
     }
   };
 
@@ -130,17 +125,24 @@ export function SettingsPage() {
     }));
   };
 
-  const testFaceService = async () => {
-    try {
-      const result = await settingsApi.testFaceService();
-      setSuccessMessage(`Face service is online (latency: ${result.latency_ms}ms)`);
-      setTimeout(() => setSuccessMessage(null), 3000);
-    } catch {
-      setError('Face service is not responding');
+  const testFaceService = () => {
+    if (isAdmin) {
+      testMutation.mutate();
     }
   };
 
-  if (isLoading) {
+  if (orgQuery.error !== null || (!orgQuery.isPending && orgSettings === null)) {
+    return (
+      <div className="p-6 text-center text-red-700" role="alert">
+        <p>{orgQuery.error?.message ?? 'Organization settings are unavailable'}</p>
+        <Button className="mt-4" onClick={() => void orgQuery.refetch()}>
+          Try again
+        </Button>
+      </div>
+    );
+  }
+
+  if (orgQuery.isPending || systemQuery.isPending || !isFormInitialized) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loading size="lg" text="Loading settings..." />
@@ -157,7 +159,7 @@ export function SettingsPage() {
           <p className="text-gray-500 mt-1">Manage organization and system settings</p>
         </div>
         {isAdmin && (
-          <Button onClick={handleSave} isLoading={isSaving}>
+          <Button onClick={handleSave} isLoading={saveMutation.isPending}>
             Save Changes
           </Button>
         )}
@@ -202,10 +204,11 @@ export function SettingsPage() {
                 disabled={!isAdmin}
               />
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="organization-timezone" className="block text-sm font-medium text-gray-700 mb-1">
                   Timezone
                 </label>
                 <select
+                  id="organization-timezone"
                   value={formData.timezone}
                   onChange={(e) => handleInputChange('timezone', e.target.value)}
                   disabled={!isAdmin}
@@ -242,14 +245,14 @@ export function SettingsPage() {
                 <Input
                   label="Start Time"
                   type="time"
-                  value={formData.settings?.work_start_time || '09:00'}
+                  value={formData.settings?.work_start_time ?? '09:00'}
                   onChange={(e) => handleSettingsChange('work_start_time', e.target.value)}
                   disabled={!isAdmin}
                 />
                 <Input
                   label="End Time"
                   type="time"
-                  value={formData.settings?.work_end_time || '17:00'}
+                  value={formData.settings?.work_end_time ?? '17:00'}
                   onChange={(e) => handleSettingsChange('work_end_time', e.target.value)}
                   disabled={!isAdmin}
                 />
@@ -258,13 +261,13 @@ export function SettingsPage() {
                 label="Late Threshold (minutes)"
                 type="number"
                 min={0}
-                max={60}
-                value={formData.settings?.late_threshold_minutes || 15}
+                max={120}
+                value={formData.settings?.late_threshold_minutes ?? 15}
                 onChange={(e) => handleSettingsChange('late_threshold_minutes', parseInt(e.target.value))}
                 disabled={!isAdmin}
               />
               <p className="text-sm text-gray-500">
-                Employees arriving more than {formData.settings?.late_threshold_minutes || 15} minutes after start time will be marked as late.
+                Employees arriving more than {formData.settings?.late_threshold_minutes ?? 15} minutes after start time will be marked as late.
               </p>
             </div>
           </CardContent>
@@ -294,30 +297,40 @@ export function SettingsPage() {
                 </div>
               </label>
 
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={formData.settings?.allow_remote_checkin ?? false}
-                  onChange={(e) => handleSettingsChange('allow_remote_checkin', e.target.checked)}
-                  disabled={!isAdmin}
-                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                />
-                <div>
-                  <span className="text-sm font-medium text-gray-700">Allow Remote Check-in</span>
-                  <p className="text-xs text-gray-500">Allow employees to check in from any device</p>
-                </div>
-              </label>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Face Match Threshold ({((formData.settings?.face_match_threshold || 0.6) * 100).toFixed(0)}%)
+                <label
+                  htmlFor="liveness-threshold"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Liveness Threshold ({((formData.settings?.liveness_threshold ?? 0.8) * 100).toFixed(0)}%)
                 </label>
                 <input
+                  id="liveness-threshold"
                   type="range"
-                  min="0.4"
-                  max="0.9"
+                  min="0.5"
+                  max="0.99"
+                  step="0.01"
+                  value={formData.settings?.liveness_threshold ?? 0.8}
+                  onChange={(e) => handleSettingsChange('liveness_threshold', parseFloat(e.target.value))}
+                  disabled={!isAdmin}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="face-match-threshold"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Face Match Threshold ({((formData.settings?.face_match_threshold ?? 0.75) * 100).toFixed(0)}%)
+                </label>
+                <input
+                  id="face-match-threshold"
+                  type="range"
+                  min="0.3"
+                  max="0.95"
                   step="0.05"
-                  value={formData.settings?.face_match_threshold || 0.6}
+                  value={formData.settings?.face_match_threshold ?? 0.75}
                   onChange={(e) => handleSettingsChange('face_match_threshold', parseFloat(e.target.value))}
                   disabled={!isAdmin}
                   className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
@@ -389,7 +402,12 @@ export function SettingsPage() {
                     <span className="font-medium">{systemInfo.total_devices}</span>
                   </div>
                   {isAdmin && (
-                    <Button variant="secondary" onClick={testFaceService} className="w-full mt-2">
+                    <Button
+                      variant="secondary"
+                      onClick={testFaceService}
+                      isLoading={testMutation.isPending}
+                      className="w-full mt-2"
+                    >
                       Test Face Service
                     </Button>
                   )}

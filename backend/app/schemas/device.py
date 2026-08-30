@@ -1,55 +1,38 @@
 from datetime import datetime
-from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class DeviceCreate(BaseModel):
-    """Schema for creating a new device."""
-    
     name: str = Field(..., min_length=1, max_length=255)
-    location: Optional[str] = Field(None, max_length=255)
+    location: str | None = Field(None, max_length=255)
     device_type: str = Field(default="kiosk", pattern="^(kiosk|tablet|mobile|web)$")
-    settings: Optional[dict] = Field(default_factory=dict)
-
-
-class DeviceCreateResponse(BaseModel):
-    """Schema for device creation response with secret."""
-    
-    id: UUID
-    name: str
-    device_secret: str  # Only returned on creation
-    org_id: UUID
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
+    settings: dict[str, object] | None = Field(default_factory=dict)
 
 
 class DeviceUpdate(BaseModel):
-    """Schema for updating a device."""
-    
-    name: Optional[str] = Field(None, min_length=1, max_length=255)
-    location: Optional[str] = Field(None, max_length=255)
-    device_type: Optional[str] = Field(None, pattern="^(kiosk|tablet|mobile|web)$")
-    is_active: Optional[bool] = None
-    settings: Optional[dict] = None
+    name: str | None = Field(None, min_length=1, max_length=255)
+    location: str | None = Field(None, max_length=255)
+    device_type: str | None = Field(None, pattern="^(kiosk|tablet|mobile|web)$")
+    is_active: bool | None = None
+    settings: dict[str, object] | None = None
 
 
 class DeviceResponse(BaseModel):
-    """Schema for device response."""
-    
     id: UUID
     org_id: UUID
     name: str
-    location: Optional[str]
+    location: str | None
     device_type: str
     is_active: bool
-    last_seen_at: Optional[datetime]
-    settings: dict
+    last_seen_at: datetime | None
+    settings: dict[str, object]
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DeviceCreateResponse(DeviceResponse):
+    device_secret: str

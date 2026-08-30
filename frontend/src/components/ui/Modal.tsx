@@ -1,10 +1,13 @@
-import { Fragment, ReactNode } from 'react';
+import { useEffect, useId, useRef } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
+import { Button } from '@/components/ui/Button';
 
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   title?: string;
+  description?: string;
   children: ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
   showCloseButton?: boolean;
@@ -22,61 +25,101 @@ export function Modal({
   isOpen,
   onClose,
   title,
+  description,
   children,
   size = 'md',
   showCloseButton = true,
 }: ModalProps) {
-  if (!isOpen) return null;
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const titleId = useId();
+  const descriptionId = useId();
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (dialog === null) {
+      return;
+    }
+    if (isOpen && !dialog.open) {
+      previousFocusRef.current = document.activeElement as HTMLElement | null;
+      dialog.showModal();
+      const firstFocusTarget = dialog.querySelector<HTMLElement>(
+        '[autofocus], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      firstFocusTarget?.focus();
+    } else if (!isOpen && dialog.open) {
+      dialog.close();
+      previousFocusRef.current?.focus();
+      previousFocusRef.current = null;
+    }
+  }, [isOpen]);
+
+  useEffect(
+    () => () => {
+      previousFocusRef.current?.focus();
+    },
+    []
+  );
+
+  const handleOutsideClick = (event: MouseEvent<HTMLDialogElement>) => {
+    if (event.target === event.currentTarget) {
+      onClose();
+    }
+  };
 
   return (
-    <Fragment>
-      {/* Backdrop */}
+    <dialog
+      ref={dialogRef}
+      aria-labelledby={title === undefined ? undefined : titleId}
+      aria-describedby={description === undefined ? undefined : descriptionId}
+      className="m-auto max-h-none w-full max-w-none bg-transparent p-4 backdrop:bg-black/50 backdrop:backdrop-blur-sm"
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          onClose();
+        }
+      }}
+      onClick={handleOutsideClick}
+    >
       <div
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 transition-opacity"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-
-      {/* Modal */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div
-          className={`
-            relative w-full ${sizeStyles[size]} bg-white rounded-xl shadow-xl
-            transform transition-all
-            animate-in fade-in zoom-in-95 duration-200
-          `}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby={title ? 'modal-title' : undefined}
-        >
-          {/* Header */}
-          {(title || showCloseButton) && (
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              {title && (
-                <h2
-                  id="modal-title"
-                  className="text-lg font-semibold text-gray-900"
-                >
+        className={`mx-auto flex max-h-[calc(100dvh-2rem)] w-full ${sizeStyles[size]} flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl`}
+        onClick={(event) => event.stopPropagation()}
+      >
+        {(title !== undefined || showCloseButton) && (
+          <div className="flex shrink-0 items-start justify-between gap-4 border-b border-gray-100 px-4 py-4 sm:px-6">
+            <div>
+              {title !== undefined && (
+                <h2 id={titleId} className="text-lg font-semibold text-gray-900">
                   {title}
                 </h2>
               )}
-              {showCloseButton && (
-                <button
-                  onClick={onClose}
-                  className="p-2 -mr-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                  aria-label="Close modal"
-                >
-                  <XMarkIcon className="w-5 h-5" />
-                </button>
+              {description !== undefined && (
+                <p id={descriptionId} className="mt-1 text-sm text-gray-600">
+                  {description}
+                </p>
               )}
             </div>
-          )}
-
-          {/* Content */}
-          <div className="px-6 py-4">{children}</div>
-        </div>
+            {showCloseButton && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={onClose}
+                className="-mr-2 min-w-11 shrink-0 px-2"
+                aria-label="Close dialog"
+              >
+                <XMarkIcon className="h-5 w-5" aria-hidden="true" />
+              </Button>
+            )}
+          </div>
+        )}
+        <div className="overflow-y-auto px-4 py-4 sm:px-6">{isOpen ? children : null}</div>
       </div>
-    </Fragment>
+    </dialog>
   );
 }
 
@@ -88,7 +131,7 @@ interface ModalFooterProps {
 export function ModalFooter({ children, className = '' }: ModalFooterProps) {
   return (
     <div
-      className={`flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 -mx-6 -mb-4 mt-4 ${className}`}
+      className={`-mx-4 -mb-4 mt-4 flex flex-col-reverse gap-3 border-t border-gray-100 px-4 py-4 sm:-mx-6 sm:flex-row sm:items-center sm:justify-end sm:px-6 ${className}`}
     >
       {children}
     </div>
@@ -119,29 +162,20 @@ export function ConfirmModal({
   isLoading = false,
 }: ConfirmModalProps) {
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={title} size="sm">
-      <p className="text-gray-600">{message}</p>
+    <Modal isOpen={isOpen} onClose={onClose} title={title} description={message} size="sm">
       <ModalFooter>
-        <button
-          onClick={onClose}
-          disabled={isLoading}
-          className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
-        >
+        <Button type="button" variant="secondary" onClick={onClose} disabled={isLoading}>
           {cancelText}
-        </button>
-        <button
+        </Button>
+        <Button
+          type="button"
+          variant={variant}
           onClick={onConfirm}
-          disabled={isLoading}
-          className={`
-            px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50
-            ${variant === 'danger'
-              ? 'bg-red-600 hover:bg-red-700'
-              : 'bg-primary-600 hover:bg-primary-700'
-            }
-          `}
+          isLoading={isLoading}
+          loadingText={variant === 'danger' ? 'Deleting' : 'Working'}
         >
-          {isLoading ? 'Loading...' : confirmText}
-        </button>
+          {confirmText}
+        </Button>
       </ModalFooter>
     </Modal>
   );

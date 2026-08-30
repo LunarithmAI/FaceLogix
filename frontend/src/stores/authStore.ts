@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { User, AuthTokens, LoginCredentials, LoginResponse } from '@/types/auth';
 import { authApi } from '@/services/auth';
+import { clearPrivateClientState } from '@/lib/session';
 
 interface AuthStore {
   user: User | null;
@@ -12,7 +13,6 @@ interface AuthStore {
 
   login: (credentials: LoginCredentials) => Promise<void>;
   logout: () => Promise<void>;
-  refreshToken: () => Promise<boolean>;
   setTokens: (tokens: AuthTokens) => void;
   setUser: (user: User) => void;
   clearError: () => void;
@@ -35,6 +35,7 @@ export const useAuthStore = create<AuthStore>()(
       login: async (credentials: LoginCredentials) => {
         set({ isLoading: true, error: null });
         try {
+          clearPrivateClientState();
           const response: LoginResponse = await authApi.login(credentials);
           
           // Build user and tokens from flat response
@@ -75,31 +76,11 @@ export const useAuthStore = create<AuthStore>()(
         } catch {
           // Ignore logout errors
         } finally {
+          clearPrivateClientState();
           set({ ...initialState });
         }
       },
 
-      refreshToken: async () => {
-        const { tokens } = get();
-        if (!tokens?.refresh_token) {
-          set({ ...initialState });
-          return false;
-        }
-
-        try {
-          const response = await authApi.refresh(tokens.refresh_token);
-          set({
-            tokens: {
-              ...tokens,
-              access_token: response.access_token,
-            },
-          });
-          return true;
-        } catch {
-          set({ ...initialState });
-          return false;
-        }
-      },
 
       setTokens: (tokens: AuthTokens) => {
         set({ tokens, isAuthenticated: true });
@@ -115,10 +96,12 @@ export const useAuthStore = create<AuthStore>()(
 
       reset: () => {
         set({ ...initialState });
+        clearPrivateClientState();
       },
     }),
     {
       name: 'facelogix-auth',
+      version: 1,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         user: state.user,
