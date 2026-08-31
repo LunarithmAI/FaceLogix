@@ -9,6 +9,7 @@ import {
   UsersIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
+import { translate as t } from '@/i18n';
 
 interface NavItem {
   name: string;
@@ -36,7 +37,7 @@ function NavigationContent({ onNavigate }: { onNavigate?: () => void }) {
       <div className="flex h-16 items-center border-b border-gray-200 px-6">
         <span className="text-xl font-bold text-primary-700">FaceLogix</span>
       </div>
-      <nav className="flex-1 space-y-1 overflow-y-auto px-4 py-4" aria-label="Administration">
+      <nav className="flex-1 space-y-1 overflow-y-auto px-4 py-4" aria-label={t('Administration')}>
         {navigation.map((item) => (
           <NavLink
             key={item.name}
@@ -57,7 +58,7 @@ function NavigationContent({ onNavigate }: { onNavigate?: () => void }) {
                   className={`mr-3 h-5 w-5 ${isActive ? 'text-primary-600' : 'text-gray-400'}`}
                   aria-hidden="true"
                 />
-                {item.name}
+                {t(item.name)}
               </>
             )}
           </NavLink>
@@ -69,7 +70,7 @@ function NavigationContent({ onNavigate }: { onNavigate?: () => void }) {
           onClick={onNavigate}
           className="flex min-h-11 items-center rounded-lg px-4 py-3 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 motion-reduce:transition-none"
         >
-          Check-In Kiosk
+          {t('Check-In Kiosk')}
         </NavLink>
       </div>
     </>
@@ -112,7 +113,7 @@ export function Sidebar({ isMobileOpen, onClose }: SidebarProps) {
 
       <aside
         id="mobile-navigation"
-        aria-label="Mobile navigation"
+        aria-label={t('Mobile navigation')}
         aria-hidden={!isMobileOpen}
         inert={!isMobileOpen}
         className={`fixed inset-y-0 left-0 z-50 flex w-64 transform flex-col bg-white shadow-xl transition-transform duration-300 motion-reduce:transition-none lg:hidden ${
@@ -124,7 +125,7 @@ export function Sidebar({ isMobileOpen, onClose }: SidebarProps) {
           type="button"
           onClick={onClose}
           className="absolute right-2 top-2 flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-          aria-label="Close navigation"
+          aria-label={t('Close navigation')}
         >
           <XMarkIcon className="h-6 w-6" aria-hidden="true" />
         </button>

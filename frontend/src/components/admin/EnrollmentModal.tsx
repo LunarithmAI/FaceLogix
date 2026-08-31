@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { usersApi } from '@/services/users';
 import type { User } from '@/types/user';
+import { translate as t } from '@/i18n';
 
 interface EnrollmentModalProps {
   isOpen: boolean;
@@ -71,8 +72,8 @@ export function EnrollmentModal({
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title="Face Enrollment"
-      description={`Capture ${MIN_CAPTURES}–${MAX_CAPTURES} clear photos of ${user.name}.`}
+      title={t('Face Enrollment')}
+      description={t('Capture {{min}}–{{max}} clear photos of {{name}}.', { min: MIN_CAPTURES, max: MAX_CAPTURES, name: user.name })}
       size="lg"
     >
       {success ? (
@@ -80,12 +81,12 @@ export function EnrollmentModal({
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
             <CheckCircleIcon className="h-8 w-8 text-green-600" aria-hidden="true" />
           </div>
-          <h3 className="mb-2 text-lg font-medium text-gray-900">Face Enrolled Successfully</h3>
+          <h3 className="mb-2 text-lg font-medium text-gray-900">{t('Face Enrolled Successfully')}</h3>
           <p className="text-gray-600">
-            {user.name}&apos;s face was enrolled with {captures.length} images.
+            {t("{{name}}'s face was enrolled with {{count}} images.", { name: user.name, count: captures.length })}
           </p>
           <Button type="button" onClick={handleClose} className="mt-6">
-            Close
+            {t('Close')}
           </Button>
         </div>
       ) : (
@@ -96,7 +97,7 @@ export function EnrollmentModal({
               role="alert"
             >
               <XCircleIcon className="mr-2 h-5 w-5 shrink-0" aria-hidden="true" />
-              {error}
+              {t(error)}
             </div>
           )}
 
@@ -116,19 +117,19 @@ export function EnrollmentModal({
               leftIcon={<CameraIcon className="h-5 w-5" aria-hidden="true" />}
               size="lg"
             >
-              Capture ({captures.length}/{MAX_CAPTURES})
+              {t('Capture ({{count}}/{{max}})', { count: captures.length, max: MAX_CAPTURES })}
             </Button>
           </div>
 
           {captures.length > 0 && (
             <div className="mb-4">
-              <p className="mb-2 text-sm font-medium text-gray-700">Captured Images</p>
+              <p className="mb-2 text-sm font-medium text-gray-700">{t('Captured Images')}</p>
               <div className="flex flex-wrap gap-3">
                 {captures.map((capture, index) => (
                   <div key={capture} className="relative">
                     <img
                       src={capture}
-                      alt={`Capture ${index + 1}`}
+                      alt={t('Capture {{number}}', { number: index + 1 })}
                       className="h-20 w-20 rounded-lg border border-gray-200 object-cover"
                     />
                     <button
@@ -137,7 +138,7 @@ export function EnrollmentModal({
                         setCaptures((current) => current.filter((_, itemIndex) => itemIndex !== index))
                       }
                       className="absolute -right-3 -top-3 flex min-h-11 min-w-11 items-center justify-center rounded-full bg-red-600 text-white hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2"
-                      aria-label={`Remove capture ${index + 1}`}
+                      aria-label={t('Remove image {{number}}', { number: index + 1 })}
                     >
                       &times;
                     </button>
@@ -149,16 +150,16 @@ export function EnrollmentModal({
 
           <ModalFooter>
             <Button type="button" variant="secondary" onClick={handleClose}>
-              Cancel
+              {t('Cancel')}
             </Button>
             <Button
               type="button"
               onClick={() => void handleEnroll()}
               disabled={captures.length < MIN_CAPTURES}
               isLoading={isEnrolling}
-              loadingText="Enrolling"
+              loadingText={t('Enrolling')}
             >
-              Enroll Face
+              {t('Enroll Face')}
             </Button>
           </ModalFooter>
         </>

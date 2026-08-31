@@ -5,7 +5,8 @@ import {
   FaceSmileIcon,
 } from '@heroicons/react/24/solid';
 import type { CheckInResult, CheckStatus } from '@/types/attendance';
-import { format } from 'date-fns';
+import { formatDateTime } from '@/utils/date';
+import { translate as t } from '@/i18n';
 
 interface StatusMessageProps {
   result: CheckInResult;
@@ -91,33 +92,35 @@ export function StatusMessage({ result, className = '' }: StatusMessageProps) {
         
         <div className="flex-1 min-w-0">
           <h3 className={`text-lg font-semibold ${config.textColor}`}>
-            {result.status === 'success'
-              ? result.check_type === 'check_out'
-                ? 'Checked Out Successfully'
-                : 'Checked In Successfully'
-              : config.title}
+            {t(
+              result.status === 'success'
+                ? result.check_type === 'check_out'
+                  ? 'Checked Out Successfully'
+                  : 'Checked In Successfully'
+                : config.title
+            )}
           </h3>
           
           <p className={`mt-1 ${config.textColor} opacity-90`}>
-            {result.message}
+            {t(result.message)}
           </p>
 
           {result.user_name && (
             <p className={`mt-2 font-medium ${config.textColor}`}>
-              Welcome, {result.user_name}!
+              {t('Welcome, {{name}}!', { name: result.user_name })}
             </p>
           )}
 
           {result.timestamp && (
             <p className={`mt-1 text-sm ${config.textColor} opacity-75`}>
-              {format(new Date(result.timestamp), 'PPpp')}
+              {formatDateTime(result.timestamp)}
             </p>
           )}
 
           {result.confidence !== undefined && result.status === 'success' && (
             <div className="mt-3">
               <div className="flex items-center justify-between text-sm">
-                <span className={config.textColor}>Confidence</span>
+                <span className={config.textColor}>{t('Confidence')}</span>
                 <span className={`font-medium ${config.textColor}`}>
                   {Math.round(result.confidence * 100)}%
                 </span>

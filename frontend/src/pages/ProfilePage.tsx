@@ -14,6 +14,8 @@ import { Loading } from '@/components/ui/Loading';
 import { RoleBadge } from '@/components/ui/Badge';
 import { authApi } from '@/services/auth';
 import { queryKeys } from '@/lib/queryClient';
+import { formatShortDate } from '@/utils/date';
+import { translate as t } from '@/i18n';
 
 
 export function ProfilePage() {
@@ -63,7 +65,7 @@ export function ProfilePage() {
   if (profileQuery.isPending) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loading size="lg" text="Loading profile..." />
+        <Loading size="lg" text={t('Loading profile...')} />
       </div>
     );
   }
@@ -71,9 +73,9 @@ export function ProfilePage() {
   if (profileQuery.error !== null || profileQuery.data === undefined) {
     return (
       <div className="p-6 text-center text-red-700" role="alert">
-        <p>{profileQuery.error?.message ?? 'Profile data is unavailable'}</p>
+        <p>{t(profileQuery.error?.message ?? 'Profile data is unavailable')}</p>
         <Button className="mt-4" onClick={() => void profileQuery.refetch()}>
-          Try again
+          {t('Try again')}
         </Button>
       </div>
     );
@@ -85,15 +87,15 @@ export function ProfilePage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Your Profile</h1>
-        <p className="text-gray-500 mt-1">View and manage your account information</p>
+        <h1 className="text-2xl font-bold text-gray-900">{t('Your Profile')}</h1>
+        <p className="text-gray-500 mt-1">{t('View and manage your account information')}</p>
       </div>
 
       {/* Messages */}
       {successMessage && (
         <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center gap-2">
           <CheckCircleIcon className="w-5 h-5" />
-          {successMessage}
+          {t(successMessage)}
         </div>
       )}
 
@@ -108,7 +110,7 @@ export function ProfilePage() {
                 </span>
               </div>
               <h2 className="text-xl font-semibold text-gray-900">{displayProfile.name}</h2>
-              <p className="text-gray-500 mt-1">{displayProfile.email || 'No email set'}</p>
+              <p className="text-gray-500 mt-1">{displayProfile.email || t('No email set')}</p>
               <div className="mt-3">
                 <RoleBadge role={displayProfile.role} />
               </div>
@@ -118,12 +120,12 @@ export function ProfilePage() {
                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                   displayProfile.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                 }`}>
-                  {displayProfile.is_active ? 'Active' : 'Inactive'}
+                  {displayProfile.is_active ? t('Active') : t('Inactive')}
                 </span>
                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                   displayProfile.enrolled_at ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800'
                 }`}>
-                  {displayProfile.enrolled_at ? 'Face Enrolled' : 'Not Enrolled'}
+                  {displayProfile.enrolled_at ? t('Face Enrolled') : t('Not Enrolled')}
                 </span>
               </div>
             </div>
@@ -135,29 +137,29 @@ export function ProfilePage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <UserCircleIcon className="w-5 h-5 text-gray-500" />
-              Account Details
+              {t('Account Details')}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <dt className="block text-sm font-medium text-gray-500">Full Name</dt>
+                  <dt className="block text-sm font-medium text-gray-500">{t('Full Name')}</dt>
                   <dd className="mt-1 text-gray-900">{displayProfile.name}</dd>
                 </div>
                 <div>
-                  <dt className="block text-sm font-medium text-gray-500">Email Address</dt>
-                  <dd className="mt-1 text-gray-900">{displayProfile.email || 'Not set'}</dd>
+                  <dt className="block text-sm font-medium text-gray-500">{t('Email Address')}</dt>
+                  <dd className="mt-1 text-gray-900">{displayProfile.email || t('Not set')}</dd>
                 </div>
                 <div>
-                  <dt className="block text-sm font-medium text-gray-500">Department</dt>
-                  <dd className="mt-1 text-gray-900">{displayProfile.department || 'Not assigned'}</dd>
+                  <dt className="block text-sm font-medium text-gray-500">{t('Department')}</dt>
+                  <dd className="mt-1 text-gray-900">{displayProfile.department || t('Not assigned')}</dd>
                 </div>
                 <div>
-                  <dt className="block text-sm font-medium text-gray-500">Member Since</dt>
+                  <dt className="block text-sm font-medium text-gray-500">{t('Member Since')}</dt>
                   <dd className="mt-1 text-gray-900 flex items-center gap-1">
                     <CalendarIcon className="w-4 h-4 text-gray-400" aria-hidden="true" />
-                    {new Date(displayProfile.created_at).toLocaleDateString()}
+                    {formatShortDate(displayProfile.created_at)}
                   </dd>
                 </div>
               </dl>
@@ -166,7 +168,7 @@ export function ProfilePage() {
                 <div className="pt-4 border-t border-gray-100">
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <ShieldCheckIcon className="w-5 h-5 text-green-500" aria-hidden="true" />
-                    Face enrolled on {new Date(displayProfile.enrolled_at).toLocaleDateString()}
+                    {t('Face enrolled on {{date}}', { date: formatShortDate(displayProfile.enrolled_at) })}
                   </div>
                 </div>
               )}
@@ -179,44 +181,44 @@ export function ProfilePage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <KeyIcon className="w-5 h-5 text-gray-500" />
-              Security
+              {t('Security')}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {!showPasswordForm ? (
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="font-medium text-gray-900">Password</p>
-                  <p className="text-sm text-gray-500">Change your account password</p>
+                  <p className="font-medium text-gray-900">{t('Password')}</p>
+                  <p className="text-sm text-gray-500">{t('Change your account password')}</p>
                 </div>
                 <Button variant="secondary" onClick={() => setShowPasswordForm(true)}>
-                  Change Password
+                  {t('Change Password')}
                 </Button>
               </div>
             ) : (
               <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
                 {passwordError && (
                   <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">
-                    {passwordError}
+                    {t(passwordError)}
                   </div>
                 )}
                 <Input
-                  label="Current Password"
+                  label={t('Current Password')}
                   type="password"
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
                   required
                 />
                 <Input
-                  label="New Password"
+                  label={t('New Password')}
                   type="password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   required
-                  helperText="Must be at least 8 characters"
+                  helperText={t('Must be at least 8 characters')}
                 />
                 <Input
-                  label="Confirm New Password"
+                  label={t('Confirm New Password')}
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
@@ -224,7 +226,7 @@ export function ProfilePage() {
                 />
                 <div className="flex gap-3">
                   <Button type="submit" isLoading={passwordMutation.isPending}>
-                    Update Password
+                    {t('Update Password')}
                   </Button>
                   <Button 
                     type="button" 
@@ -237,7 +239,7 @@ export function ProfilePage() {
                       setConfirmPassword('');
                     }}
                   >
-                    Cancel
+                    {t('Cancel')}
                   </Button>
                 </div>
               </form>

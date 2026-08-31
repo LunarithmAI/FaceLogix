@@ -5,6 +5,7 @@ import {
 import type { AttendanceLog } from '@/types/attendance';
 import { formatTime, formatShortDate } from '@/utils/date';
 import { Badge } from '@/components/ui/Badge';
+import { translate as t } from '@/i18n';
 
 interface AttendanceListProps {
   logs: AttendanceLog[];
@@ -17,7 +18,7 @@ interface AttendanceListProps {
 export function AttendanceList({
   logs,
   isLoading = false,
-  emptyMessage = 'No attendance records found',
+  emptyMessage = t('No attendance records found'),
   showUser = true,
   showDevice = true,
 }: AttendanceListProps) {
@@ -40,31 +41,31 @@ export function AttendanceList({
   }
 
   return (
-    <div className="overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500" role="region" aria-label="Attendance records table" tabIndex={0}>
+    <div className="overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500" role="region" aria-label={t('Attendance records table')} tabIndex={0}>
       <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Type
+              {t('Type')}
             </th>
             {showUser && (
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                User
+                {t('User')}
               </th>
             )}
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Date
+              {t('Date')}
             </th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Time
+              {t('Time')}
             </th>
             {showDevice && (
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Device
+                {t('Device')}
               </th>
             )}
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Confidence
+              {t('Confidence')}
             </th>
           </tr>
         </thead>
@@ -76,12 +77,12 @@ export function AttendanceList({
                   {log.check_type === 'check_in' ? (
                     <span className="flex items-center text-green-600">
                       <ArrowRightOnRectangleIcon className="w-5 h-5 mr-2" />
-                      <Badge variant="success">Check In</Badge>
+                      <Badge variant="success">{t('Check In')}</Badge>
                     </span>
                   ) : (
                     <span className="flex items-center text-blue-600">
                       <ArrowLeftOnRectangleIcon className="w-5 h-5 mr-2" />
-                      <Badge variant="info">Check Out</Badge>
+                      <Badge variant="info">{t('Check Out')}</Badge>
                     </span>
                   )}
                 </div>
@@ -129,7 +130,7 @@ export function AttendanceList({
                       </span>
                     </>
                   ) : (
-                    <span className="text-sm text-gray-400">N/A</span>
+                    <span className="text-sm text-gray-400">{t('N/A')}</span>
                   )}
                 </div>
               </td>

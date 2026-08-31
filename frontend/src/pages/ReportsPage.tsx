@@ -14,6 +14,7 @@ import { Loading } from '@/components/ui/Loading';
 import { reportsApi } from '@/services/reports';
 import { formatApiDate, formatDisplayDate } from '@/utils/date';
 import { queryKeys } from '@/lib/queryClient';
+import { translate as t } from '@/i18n';
 
 
 export function ReportsPage() {
@@ -74,7 +75,7 @@ export function ReportsPage() {
   if (reportsQuery.isPending) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loading size="lg" text="Loading reports..." />
+        <Loading size="lg" text={t('Loading reports...')} />
       </div>
     );
   }
@@ -82,9 +83,9 @@ export function ReportsPage() {
   if (reportsQuery.error !== null) {
     return (
       <div className="p-6 text-center text-red-700" role="alert">
-        <p>{reportsQuery.error.message}</p>
+        <p>{t(reportsQuery.error.message)}</p>
         <Button className="mt-4" onClick={() => void reportsQuery.refetch()}>
-          Try again
+          {t('Try again')}
         </Button>
       </div>
     );
@@ -95,24 +96,24 @@ export function ReportsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
-          <p className="text-gray-500 mt-1">Attendance analytics and export</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t('Reports')}</h1>
+          <p className="text-gray-500 mt-1">{t('Attendance analytics and export')}</p>
         </div>
       </div>
 
       {exportMutation.error !== null && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700" role="alert">
-          {exportMutation.error.message}
+          {t(exportMutation.error.message)}
         </div>
       )}
 
       {/* Date Range & Export */}
       <Card>
         <div className="p-4">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Generate Report</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">{t('Generate Report')}</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Input
-              label="Start Date"
+              label={t('Start Date')}
               type="date"
               value={draftRange.from_date}
               onChange={(event) =>
@@ -120,7 +121,7 @@ export function ReportsPage() {
               }
             />
             <Input
-              label="End Date"
+              label={t('End Date')}
               type="date"
               value={draftRange.to_date}
               onChange={(event) =>
@@ -129,7 +130,7 @@ export function ReportsPage() {
             />
             <div className="flex items-end">
               <p className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-2 text-sm text-gray-600">
-                Export format: CSV
+                {t('Export format: CSV')}
               </p>
             </div>
             <div className="flex items-end">
@@ -138,7 +139,7 @@ export function ReportsPage() {
                 variant="secondary"
                 className="w-full"
               >
-                Refresh
+                {t('Refresh')}
               </Button>
             </div>
             <div className="flex items-end">
@@ -148,7 +149,7 @@ export function ReportsPage() {
                 leftIcon={<ArrowDownTrayIcon className="w-5 h-5" />}
                 className="w-full"
               >
-                Export
+                {t('Export')}
               </Button>
             </div>
           </div>
@@ -164,7 +165,7 @@ export function ReportsPage() {
                 <CalendarIcon className="w-6 h-6 text-blue-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Days Analyzed</p>
+                <p className="text-sm text-gray-500">{t('Days Analyzed')}</p>
                 <p className="text-2xl font-bold text-gray-900">{dailySummaries.length}</p>
               </div>
             </div>
@@ -178,7 +179,7 @@ export function ReportsPage() {
                 <UserGroupIcon className="w-6 h-6 text-green-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Total Check-Ins</p>
+                <p className="text-sm text-gray-500">{t('Total Check-Ins')}</p>
                 <p className="text-2xl font-bold text-gray-900">{totalCheckIns}</p>
               </div>
             </div>
@@ -192,7 +193,7 @@ export function ReportsPage() {
                 <ChartBarIcon className="w-6 h-6 text-orange-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Total Check-Outs</p>
+                <p className="text-sm text-gray-500">{t('Total Check-Outs')}</p>
                 <p className="text-2xl font-bold text-gray-900">{totalCheckOuts}</p>
               </div>
             </div>
@@ -206,7 +207,7 @@ export function ReportsPage() {
                 <ClockIcon className="w-6 h-6 text-purple-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Avg On-Time Rate</p>
+                <p className="text-sm text-gray-500">{t('Avg On-Time Rate')}</p>
                 <p className="text-2xl font-bold text-gray-900">{avgOnTime}%</p>
               </div>
             </div>
@@ -217,18 +218,18 @@ export function ReportsPage() {
       {/* Weekly Trend */}
       <Card>
         <div className="p-4">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Weekly Attendance Trend</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">{t('Weekly Attendance Trend')}</h2>
           {weeklyTrend.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">No trend data available</p>
+            <p className="text-gray-500 text-center py-8">{t('No trend data available')}</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-gray-200">
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">Date</th>
-                    <th className="text-right py-3 px-4 font-medium text-gray-600">Check-Ins</th>
-                    <th className="text-right py-3 px-4 font-medium text-gray-600">Check-Outs</th>
-                    <th className="text-right py-3 px-4 font-medium text-gray-600">Trend</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-600">{t('Date')}</th>
+                    <th className="text-right py-3 px-4 font-medium text-gray-600">{t('Check-Ins')}</th>
+                    <th className="text-right py-3 px-4 font-medium text-gray-600">{t('Check-Outs')}</th>
+                    <th className="text-right py-3 px-4 font-medium text-gray-600">{t('Trend')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -268,18 +269,18 @@ export function ReportsPage() {
       {/* Department Summary */}
       <Card>
         <div className="p-4">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Department Attendance Summary</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">{t('Department Attendance Summary')}</h2>
           {departmentSummary.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">No department data available</p>
+            <p className="text-gray-500 text-center py-8">{t('No department data available')}</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-gray-200">
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">Department</th>
-                    <th className="text-right py-3 px-4 font-medium text-gray-600">Present</th>
-                    <th className="text-right py-3 px-4 font-medium text-gray-600">Absent</th>
-                    <th className="text-right py-3 px-4 font-medium text-gray-600">Rate</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-600">{t('Department')}</th>
+                    <th className="text-right py-3 px-4 font-medium text-gray-600">{t('Present')}</th>
+                    <th className="text-right py-3 px-4 font-medium text-gray-600">{t('Absent')}</th>
+                    <th className="text-right py-3 px-4 font-medium text-gray-600">{t('Rate')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -289,7 +290,7 @@ export function ReportsPage() {
                     return (
                       <tr key={dept.department} className="border-b border-gray-100 hover:bg-gray-50">
                         <td className="py-3 px-4 text-gray-900 font-medium">
-                          {dept.department || 'Unassigned'}
+                          {dept.department || t('Unassigned')}
                         </td>
                         <td className="py-3 px-4 text-right text-green-600 font-medium">
                           {dept.present}
@@ -319,19 +320,19 @@ export function ReportsPage() {
       {/* Daily Breakdown */}
       <Card>
         <div className="p-4">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Daily Breakdown</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">{t('Daily Breakdown')}</h2>
           {dailySummaries.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">No data available for selected period</p>
+            <p className="text-gray-500 text-center py-8">{t('No data available for selected period')}</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-gray-200">
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">Date</th>
-                    <th className="text-right py-3 px-4 font-medium text-gray-600">Check-Ins</th>
-                    <th className="text-right py-3 px-4 font-medium text-gray-600">Check-Outs</th>
-                    <th className="text-right py-3 px-4 font-medium text-gray-600">On-Time</th>
-                    <th className="text-right py-3 px-4 font-medium text-gray-600">Late</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-600">{t('Date')}</th>
+                    <th className="text-right py-3 px-4 font-medium text-gray-600">{t('Check-Ins')}</th>
+                    <th className="text-right py-3 px-4 font-medium text-gray-600">{t('Check-Outs')}</th>
+                    <th className="text-right py-3 px-4 font-medium text-gray-600">{t('On-Time')}</th>
+                    <th className="text-right py-3 px-4 font-medium text-gray-600">{t('Late')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -358,7 +359,7 @@ export function ReportsPage() {
               </table>
               {dailySummaries.length > 14 && (
                 <p className="text-center text-gray-500 mt-4 text-sm">
-                  Showing first 14 days. Export for full data.
+                  {t('Showing first 14 days. Export for full data.')}
                 </p>
               )}
             </div>

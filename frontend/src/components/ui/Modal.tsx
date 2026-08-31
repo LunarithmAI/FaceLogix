@@ -2,6 +2,7 @@ import { useEffect, useId, useRef } from 'react';
 import type { MouseEvent, ReactNode } from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { Button } from '@/components/ui/Button';
+import { translate as t } from '@/i18n';
 
 interface ModalProps {
   isOpen: boolean;
@@ -110,7 +111,7 @@ export function Modal({
                 size="sm"
                 onClick={onClose}
                 className="-mr-2 min-w-11 shrink-0 px-2"
-                aria-label="Close dialog"
+                aria-label={t('Close dialog')}
               >
                 <XMarkIcon className="h-5 w-5" aria-hidden="true" />
               </Button>
@@ -156,8 +157,8 @@ export function ConfirmModal({
   onConfirm,
   title,
   message,
-  confirmText = 'Confirm',
-  cancelText = 'Cancel',
+  confirmText = t('Confirm'),
+  cancelText = t('Cancel'),
   variant = 'primary',
   isLoading = false,
 }: ConfirmModalProps) {
@@ -172,7 +173,7 @@ export function ConfirmModal({
           variant={variant}
           onClick={onConfirm}
           isLoading={isLoading}
-          loadingText={variant === 'danger' ? 'Deleting' : 'Working'}
+          loadingText={variant === 'danger' ? t('Deleting') : t('Working')}
         >
           {confirmText}
         </Button>

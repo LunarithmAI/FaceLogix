@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import type { User, CreateUserRequest, UpdateUserRequest } from '@/types/user';
 import type { UserRole } from '@/types/roles';
+import { translate as t } from '@/i18n';
 
 interface UserFormProps {
   user?: User;
@@ -79,21 +80,21 @@ export function UserForm({
     <form onSubmit={(event) => void handleSubmit(event)} className="space-y-4">
       {errors.submit && (
         <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
-          {errors.submit}
+          {t(errors.submit)}
         </div>
       )}
 
       <Input
-        label="Name"
+        label={t('Name')}
         value={formData.name}
         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-        error={errors.name}
+        error={errors.name === undefined ? undefined : t(errors.name)}
         placeholder="John Doe"
         required
       />
 
       <Input
-        label="Email"
+        label={t('Email')}
         type="email"
         value={formData.email}
         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -103,50 +104,50 @@ export function UserForm({
 
       {!user && (
         <Input
-          label="Password"
+          label={t('Password')}
           type="password"
           value={formData.password}
           onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-          error={errors.password}
-          placeholder="Minimum 8 characters (optional)"
+          error={errors.password === undefined ? undefined : t(errors.password)}
+          placeholder={t('Minimum 8 characters (optional)')}
         />
       )}
 
       <div>
-        <label htmlFor="user-role" className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+        <label htmlFor="user-role" className="block text-sm font-medium text-gray-700 mb-1">{t('Role')}</label>
         <select
           id="user-role"
           value={formData.role}
           onChange={(e) => setFormData({ ...formData, role: e.target.value as UserRole })}
           className="block w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
         >
-          <option value="member">Member</option>
-          {canAssignElevatedRoles && <option value="manager">Manager</option>}
-          {canAssignElevatedRoles && <option value="admin">Admin</option>}
-          {canAssignElevatedRoles && <option value="super_admin">Super Admin</option>}
+          <option value="member">{t('Member')}</option>
+          {canAssignElevatedRoles && <option value="manager">{t('Manager')}</option>}
+          {canAssignElevatedRoles && <option value="admin">{t('Admin')}</option>}
+          {canAssignElevatedRoles && <option value="super_admin">{t('Super Admin')}</option>}
         </select>
       </div>
 
       <Input
-        label="External ID"
+        label={t('External ID')}
         value={formData.external_id}
         onChange={(e) => setFormData({ ...formData, external_id: e.target.value })}
         placeholder="EMP001"
       />
 
       <Input
-        label="Department"
+        label={t('Department')}
         value={formData.department}
         onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-        placeholder="Engineering"
+        placeholder={t('Engineering')}
       />
 
       <div className="flex justify-end gap-3 pt-4">
         <Button type="button" variant="secondary" onClick={onCancel}>
-          Cancel
+          {t('Cancel')}
         </Button>
         <Button type="submit" isLoading={isLoading}>
-          {user ? 'Update User' : 'Create User'}
+          {user ? t('Update User') : t('Create User')}
         </Button>
       </div>
     </form>

@@ -11,6 +11,7 @@ import { devicesApi } from '@/services/devices';
 import type { Device, DeviceCredential, DeviceRegistration, DeviceType } from '@/types/device';
 import { queryClient, queryKeys } from '@/lib/queryClient';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { translate as t } from '@/i18n';
 
 export function DevicesPage() {
   const [search, setSearch] = useState('');
@@ -144,17 +145,17 @@ export function DevicesPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Devices</h1>
-            <p className="text-gray-500 mt-1">Manage check-in devices and kiosks</p>
+            <h1 className="text-2xl font-bold text-gray-900">{t('Devices')}</h1>
+            <p className="text-gray-500 mt-1">{t('Manage check-in devices and kiosks')}</p>
           </div>
           <Button leftIcon={<PlusIcon className="w-5 h-5" />} onClick={handleCreate}>
-            Add Device
+            {t('Add Device')}
           </Button>
         </div>
 
         {actionError !== null && (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700" role="alert">
-            {actionError.message}
+            {t(actionError.message)}
           </div>
         )}
 
@@ -166,7 +167,7 @@ export function DevicesPage() {
                 <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <Input
                   type="search"
-                  placeholder="Search devices..."
+                  placeholder={t('Search devices...')}
                   value={search}
                   onChange={(e) => handleSearch(e.target.value)}
                   className="pl-10"
@@ -180,17 +181,17 @@ export function DevicesPage() {
         <Card>
           {devicesQuery.isPending ? (
             <div className="py-12">
-              <Loading size="lg" text="Loading devices..." />
+              <Loading size="lg" text={t('Loading devices...')} />
             </div>
           ) : devicesQuery.error !== null ? (
             <div className="p-6 text-center text-red-700" role="alert">
-              <p>{devicesQuery.error.message}</p>
+              <p>{t(devicesQuery.error.message)}</p>
               <Button
                 variant="secondary"
                 className="mt-4"
                 onClick={() => void devicesQuery.refetch()}
               >
-                Try again
+                {t('Try again')}
               </Button>
             </div>
           ) : (
@@ -206,7 +207,7 @@ export function DevicesPage() {
               {devices && devices.pages > 1 && (
                 <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200">
                   <p className="text-sm text-gray-500">
-                    Page {devices.page} of {devices.pages} ({devices.total} devices)
+                    {t('Page')} {devices.page} {t('of')} {devices.pages} ({devices.total} {t('devices')})
                   </p>
                   <div className="flex gap-2">
                     <Button
@@ -215,7 +216,7 @@ export function DevicesPage() {
                       onClick={() => setPage(page - 1)}
                       disabled={page === 1}
                     >
-                      Previous
+                      {t('Previous')}
                     </Button>
                     <Button
                       variant="secondary"
@@ -223,7 +224,7 @@ export function DevicesPage() {
                       onClick={() => setPage(page + 1)}
                       disabled={page === devices.pages}
                     >
-                      Next
+                      {t('Next')}
                     </Button>
                   </div>
                 </div>
@@ -237,25 +238,25 @@ export function DevicesPage() {
       <Modal
         isOpen={isFormOpen}
         onClose={() => setIsFormOpen(false)}
-        title={selectedDevice ? 'Edit Device' : 'Register Device'}
+        title={selectedDevice ? t('Edit Device') : t('Register Device')}
       >
         <div className="space-y-4">
           {saveMutation.error !== null && (
             <p className="text-sm text-red-700" role="alert">
-              {saveMutation.error.message}
+              {t(saveMutation.error.message)}
             </p>
           )}
           <Input
-            label="Device Name"
+            label={t('Device Name')}
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            placeholder="Main Entrance Kiosk"
+            placeholder={t('Main Entrance Kiosk')}
             required
           />
 
           <div>
             <label htmlFor="device-type" className="block text-sm font-medium text-gray-700 mb-1">
-              Device Type
+              {t('Device Type')}
             </label>
             <select
               id="device-type"
@@ -265,27 +266,27 @@ export function DevicesPage() {
               }
               className="block w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             >
-              <option value="kiosk">Kiosk</option>
-              <option value="tablet">Tablet</option>
-              <option value="mobile">Mobile</option>
-              <option value="web">Web</option>
+              <option value="kiosk">{t('Kiosk')}</option>
+              <option value="tablet">{t('Tablet')}</option>
+              <option value="mobile">{t('Mobile')}</option>
+              <option value="web">{t('Web')}</option>
             </select>
           </div>
 
           <Input
-            label="Location"
+            label={t('Location')}
             value={formData.location}
             onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-            placeholder="Building A, Floor 1"
+            placeholder={t('Building A, Floor 1')}
           />
         </div>
 
         <ModalFooter>
           <Button variant="secondary" onClick={() => setIsFormOpen(false)}>
-            Cancel
+            {t('Cancel')}
           </Button>
           <Button onClick={handleFormSubmit} isLoading={isSubmitting}>
-            {selectedDevice ? 'Update' : 'Register'}
+            {selectedDevice ? t('Update') : t('Register')}
           </Button>
         </ModalFooter>
       </Modal>
@@ -293,25 +294,25 @@ export function DevicesPage() {
       <Modal
         isOpen={newCredential !== null}
         onClose={() => setNewCredential(null)}
-        title="Save device credentials"
+        title={t('Save device credentials')}
       >
         <p className="text-sm text-gray-600">
-          This secret is shown once. Store it in the device configuration before closing.
+          {t('This secret is shown once. Store it in the device configuration before closing.')}
         </p>
         <dl className="mt-4 space-y-3 rounded-lg bg-gray-50 p-4">
           <div>
-            <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">Device ID</dt>
+            <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">{t('Device ID')}</dt>
             <dd className="mt-1 break-all font-mono text-sm text-gray-900">{newCredential?.id}</dd>
           </div>
           <div>
-            <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">Secret</dt>
+            <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">{t('Secret')}</dt>
             <dd className="mt-1 break-all font-mono text-sm text-gray-900">
               {newCredential?.device_secret}
             </dd>
           </div>
         </dl>
         <ModalFooter>
-          <Button onClick={() => setNewCredential(null)}>I have saved it</Button>
+          <Button onClick={() => setNewCredential(null)}>{t('I have saved it')}</Button>
         </ModalFooter>
       </Modal>
 
@@ -320,9 +321,9 @@ export function DevicesPage() {
         isOpen={isDeleteOpen}
         onClose={() => setIsDeleteOpen(false)}
         onConfirm={handleConfirmDelete}
-        title="Delete Device"
-        message={`Are you sure you want to delete ${selectedDevice?.name}? This action cannot be undone.`}
-        confirmText="Delete"
+        title={t('Delete Device')}
+        message={t('Are you sure you want to delete {{name}}? This action cannot be undone.', { name: selectedDevice?.name })}
+        confirmText={t('Delete')}
         variant="danger"
         isLoading={isSubmitting}
       />

@@ -1,4 +1,10 @@
 import { format, formatDistanceToNow, parseISO, isToday, isYesterday } from 'date-fns';
+import { enUS, vi } from 'date-fns/locale';
+import { getCurrentLanguage, translate as t } from '@/i18n';
+
+function getDateLocale() {
+  return getCurrentLanguage() === 'vi' ? vi : enUS;
+}
 
 /**
  * Format a date string to a readable format
@@ -9,7 +15,7 @@ import { format, formatDistanceToNow, parseISO, isToday, isYesterday } from 'dat
 export function formatDate(dateString: string, formatStr: string = 'PPP'): string {
   try {
     const date = parseISO(dateString);
-    return format(date, formatStr);
+    return format(date, formatStr, { locale: getDateLocale() });
   } catch {
     return dateString;
   }
@@ -42,7 +48,7 @@ export function formatShortDate(dateString: string): string {
 export function formatRelative(dateString: string): string {
   try {
     const date = parseISO(dateString);
-    return formatDistanceToNow(date, { addSuffix: true });
+    return formatDistanceToNow(date, { addSuffix: true, locale: getDateLocale() });
   } catch {
     return dateString;
   }
@@ -60,21 +66,24 @@ export function formatSmartDate(dateString: string): string {
     const date = parseISO(dateString);
     
     if (isToday(date)) {
-      return `Today at ${format(date, 'p')}`;
+      return t('Today at {{time}}', { time: format(date, 'p', { locale: getDateLocale() }) });
     }
     
     if (isYesterday(date)) {
-      return `Yesterday at ${format(date, 'p')}`;
+      return t('Yesterday at {{time}}', { time: format(date, 'p', { locale: getDateLocale() }) });
     }
     
     const now = new Date();
     const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
     
     if (diffDays < 7) {
-      return format(date, "EEEE 'at' p");
+      return t('{{day}} at {{time}}', {
+        day: format(date, 'EEEE', { locale: getDateLocale() }),
+        time: format(date, 'p', { locale: getDateLocale() }),
+      });
     }
     
-    return format(date, 'PP');
+    return format(date, 'PP', { locale: getDateLocale() });
   } catch {
     return dateString;
   }
@@ -87,17 +96,17 @@ export function formatSmartDate(dateString: string): string {
  */
 export function formatDuration(minutes: number): string {
   if (minutes < 60) {
-    return `${minutes}m`;
+    return t('{{minutes}}m', { minutes });
   }
   
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
   
   if (mins === 0) {
-    return `${hours}h`;
+    return t('{{hours}}h', { hours });
   }
   
-  return `${hours}h ${mins}m`;
+  return t('{{hours}}h {{minutes}}m', { hours, minutes: mins });
 }
 
 /**
@@ -148,11 +157,11 @@ export function formatDisplayDate(dateString: string): string {
     if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
       const [year, month, day] = dateString.split('-').map(Number);
       const date = new Date(year, month - 1, day);
-      return format(date, 'PP');
+      return format(date, 'PP', { locale: getDateLocale() });
     }
     // Handle ISO date strings
     const date = parseISO(dateString);
-    return format(date, 'PP');
+    return format(date, 'PP', { locale: getDateLocale() });
   } catch {
     return dateString;
   }

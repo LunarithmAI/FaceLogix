@@ -12,6 +12,7 @@ import {
   DisclosureMenu,
   disclosureMenuItemClass,
 } from '@/components/ui/DisclosureMenu';
+import { translate as t } from '@/i18n';
 
 const DEVICE_TYPE_LABELS = {
   kiosk: 'Kiosk',
@@ -50,33 +51,33 @@ export function DeviceTable({
   if (devices.length === 0) {
     return (
       <div className="text-center py-12 text-gray-500">
-        <p>No devices found</p>
+        <p>{t('No devices found')}</p>
       </div>
     );
   }
 
   return (
-    <div className="overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500" role="region" aria-label="Devices table" tabIndex={0}>
+    <div className="overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500" role="region" aria-label={t('Devices table')} tabIndex={0}>
       <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Device
+              {t('Device')}
             </th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Type
+              {t('Type')}
             </th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Status
+              {t('Status')}
             </th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Location
+              {t('Location')}
             </th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Last Active
+              {t('Last Active')}
             </th>
             <th className="relative px-6 py-3">
-              <span className="sr-only">Actions</span>
+              <span className="sr-only">{t('Actions')}</span>
             </th>
           </tr>
         </thead>
@@ -107,7 +108,7 @@ export function DeviceTable({
                 </div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
-                <Badge variant="default">{DEVICE_TYPE_LABELS[device.device_type]}</Badge>
+                <Badge variant="default">{t(DEVICE_TYPE_LABELS[device.device_type])}</Badge>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
                 <StatusBadge status={device.is_active ? 'active' : 'inactive'} />
@@ -118,11 +119,11 @@ export function DeviceTable({
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                 {device.last_seen_at
                   ? formatSmartDate(device.last_seen_at)
-                  : 'Never'}
+                  : t('Never')}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                 <DisclosureMenu
-                  label={`Actions for ${device.name}`}
+                  label={t('Actions for {{name}}', { name: device.name })}
                   trigger={
                     <EllipsisVerticalIcon
                       className="mx-auto h-5 w-5 text-gray-500"
@@ -142,7 +143,7 @@ export function DeviceTable({
                         className={disclosureMenuItemClass}
                       >
                         <PencilIcon className="mr-3 h-4 w-4" aria-hidden="true" />
-                        Edit
+                        {t('Edit')}
                       </button>
                       <button
                         type="button"
@@ -156,12 +157,12 @@ export function DeviceTable({
                         {device.is_active ? (
                           <>
                             <SignalSlashIcon className="mr-3 h-4 w-4" aria-hidden="true" />
-                            Deactivate
+                            {t('Deactivate')}
                           </>
                         ) : (
                           <>
                             <SignalIcon className="mr-3 h-4 w-4" aria-hidden="true" />
-                            Activate
+                            {t('Activate')}
                           </>
                         )}
                       </button>
@@ -176,7 +177,7 @@ export function DeviceTable({
                         className={`${disclosureMenuItemClass} text-red-600 hover:bg-red-50 focus-visible:bg-red-50`}
                       >
                         <TrashIcon className="mr-3 h-4 w-4" aria-hidden="true" />
-                        Delete
+                        {t('Delete')}
                       </button>
                     </>
                   )}

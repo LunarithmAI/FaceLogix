@@ -10,6 +10,7 @@ import { reportsApi } from '@/services/reports';
 import type { CheckType } from '@/types/attendance';
 import { queryKeys } from '@/lib/queryClient';
 import { formatApiDate } from '@/utils/date';
+import { translate as t } from '@/i18n';
 
 export function AttendancePage() {
   const [page, setPage] = useState(1);
@@ -73,8 +74,8 @@ export function AttendancePage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Attendance Logs</h1>
-            <p className="text-gray-500 mt-1">View and export attendance records</p>
+            <h1 className="text-2xl font-bold text-gray-900">{t('Attendance Logs')}</h1>
+            <p className="text-gray-500 mt-1">{t('View and export attendance records')}</p>
           </div>
           <div className="flex gap-2">
             <Button
@@ -82,7 +83,7 @@ export function AttendancePage() {
               leftIcon={<FunnelIcon className="w-5 h-5" />}
               onClick={() => setShowFilters(!showFilters)}
             >
-              Filters
+              {t('Filters')}
             </Button>
             <Button
               variant="secondary"
@@ -90,14 +91,14 @@ export function AttendancePage() {
               onClick={() => exportMutation.mutate()}
               isLoading={exportMutation.isPending}
             >
-              Export
+              {t('Export')}
             </Button>
           </div>
         </div>
 
         {exportMutation.error !== null && (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700" role="alert">
-            {exportMutation.error.message}
+            {t(exportMutation.error.message)}
           </div>
         )}
 
@@ -106,7 +107,7 @@ export function AttendancePage() {
           <Card>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <Input
-                label="Start Date"
+                label={t('Start Date')}
                 type="date"
                 value={draftFilters.from_date}
                 onChange={(event) =>
@@ -114,7 +115,7 @@ export function AttendancePage() {
                 }
               />
               <Input
-                label="End Date"
+                label={t('End Date')}
                 type="date"
                 value={draftFilters.to_date}
                 onChange={(event) =>
@@ -123,7 +124,7 @@ export function AttendancePage() {
               />
               <div>
                 <label htmlFor="attendance-check-type" className="block text-sm font-medium text-gray-700 mb-1">
-                  Check Type
+                  {t('Check Type')}
                 </label>
                 <select
                   id="attendance-check-type"
@@ -136,14 +137,14 @@ export function AttendancePage() {
                   }
                   className="block w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 >
-                  <option value="">All</option>
-                  <option value="check_in">Check In</option>
-                  <option value="check_out">Check Out</option>
+                  <option value="">{t('All')}</option>
+                  <option value="check_in">{t('Check In')}</option>
+                  <option value="check_out">{t('Check Out')}</option>
                 </select>
               </div>
               <div className="flex items-end">
                 <Button onClick={handleApplyFilters} className="w-full">
-                  Apply Filters
+                  {t('Apply Filters')}
                 </Button>
               </div>
             </div>
@@ -154,31 +155,31 @@ export function AttendancePage() {
         <Card>
           {attendanceQuery.isPending ? (
             <div className="py-12">
-              <Loading size="lg" text="Loading attendance logs..." />
+              <Loading size="lg" text={t('Loading attendance logs...')} />
             </div>
           ) : attendanceQuery.error !== null ? (
             <div className="p-6 text-center text-red-700" role="alert">
-              <p>{attendanceQuery.error.message}</p>
+              <p>{t(attendanceQuery.error.message)}</p>
               <Button
                 variant="secondary"
                 className="mt-4"
                 onClick={() => void attendanceQuery.refetch()}
               >
-                Try again
+                {t('Try again')}
               </Button>
             </div>
           ) : (
             <>
               <AttendanceList
                 logs={logs?.items || []}
-                emptyMessage="No attendance records found for the selected period"
+                emptyMessage={t('No attendance records found for the selected period')}
               />
 
               {/* Pagination */}
               {logs && logs.pages > 1 && (
                 <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200">
                   <p className="text-sm text-gray-500">
-                    Page {logs.page} of {logs.pages} ({logs.total} records)
+                    {t('Page')} {logs.page} {t('of')} {logs.pages} ({logs.total} {t('records')})
                   </p>
                   <div className="flex gap-2">
                     <Button
@@ -187,7 +188,7 @@ export function AttendancePage() {
                       onClick={() => setPage(page - 1)}
                       disabled={page === 1}
                     >
-                      Previous
+                      {t('Previous')}
                     </Button>
                     <Button
                       variant="secondary"
@@ -195,7 +196,7 @@ export function AttendancePage() {
                       onClick={() => setPage(page + 1)}
                       disabled={page === logs.pages}
                     >
-                      Next
+                      {t('Next')}
                     </Button>
                   </div>
                 </div>

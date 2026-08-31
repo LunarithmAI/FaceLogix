@@ -18,6 +18,8 @@ import { useAuthStore } from '@/stores/authStore';
 import { settingsApi, type OrgSettingsUpdate } from '@/services/settings';
 import { queryKeys } from '@/lib/queryClient';
 import { ADMIN_ROLES } from '@/types/roles';
+import { formatShortDate } from '@/utils/date';
+import { translate as t } from '@/i18n';
 
 // Timezone options
 const TIMEZONES = [
@@ -30,16 +32,22 @@ const TIMEZONES = [
   { value: 'Europe/Paris', label: 'Paris (CET)' },
   { value: 'Asia/Tokyo', label: 'Tokyo (JST)' },
   { value: 'Asia/Shanghai', label: 'Shanghai (CST)' },
+  { value: 'Asia/Ho_Chi_Minh', label: 'Ho Chi Minh City (ICT)' },
   { value: 'Asia/Singapore', label: 'Singapore (SGT)' },
   { value: 'Australia/Sydney', label: 'Sydney (AEDT)' },
 ];
+interface LocalizedMessage {
+  key: string;
+  options?: Parameters<typeof t>[1];
+}
+
 
 export function SettingsPage() {
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
   const isAdmin = user !== null && ADMIN_ROLES.includes(user.role);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<LocalizedMessage | null>(null);
   const [isFormInitialized, setIsFormInitialized] = useState(false);
 
   // Form state
@@ -72,7 +80,7 @@ export function SettingsPage() {
     },
     onSuccess: (updated) => {
       queryClient.setQueryData(queryKeys.settings, updated);
-      setSuccessMessage('Settings saved successfully');
+      setSuccessMessage({ key: 'Settings saved successfully' });
     },
     onError: (error) => {
       setActionError(error.message);
@@ -85,7 +93,7 @@ export function SettingsPage() {
       setSuccessMessage(null);
     },
     onSuccess: (result) => {
-      setSuccessMessage(`Face service is online (latency: ${result.latency_ms}ms)`);
+      setSuccessMessage({ key: 'Face service is online (latency: {{latency}}ms)', options: { latency: result.latency_ms } });
     },
     onError: () => {
       setActionError('Face service is not responding');
@@ -134,9 +142,9 @@ export function SettingsPage() {
   if (orgQuery.error !== null || (!orgQuery.isPending && orgSettings === null)) {
     return (
       <div className="p-6 text-center text-red-700" role="alert">
-        <p>{orgQuery.error?.message ?? 'Organization settings are unavailable'}</p>
+        <p>{t(orgQuery.error?.message ?? 'Organization settings are unavailable')}</p>
         <Button className="mt-4" onClick={() => void orgQuery.refetch()}>
-          Try again
+          {t('Try again')}
         </Button>
       </div>
     );
@@ -145,7 +153,7 @@ export function SettingsPage() {
   if (orgQuery.isPending || systemQuery.isPending || !isFormInitialized) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loading size="lg" text="Loading settings..." />
+        <Loading size="lg" text={t('Loading settings...')} />
       </div>
     );
   }
@@ -155,12 +163,12 @@ export function SettingsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-          <p className="text-gray-500 mt-1">Manage organization and system settings</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t('Settings')}</h1>
+          <p className="text-gray-500 mt-1">{t('Manage organization and system settings')}</p>
         </div>
         {isAdmin && (
           <Button onClick={handleSave} isLoading={saveMutation.isPending}>
-            Save Changes
+            {t('Save Changes')}
           </Button>
         )}
       </div>
@@ -169,20 +177,20 @@ export function SettingsPage() {
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2">
           <ExclamationTriangleIcon className="w-5 h-5" />
-          {error}
+          {t(error)}
         </div>
       )}
       {successMessage && (
         <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center gap-2">
           <CheckCircleIcon className="w-5 h-5" />
-          {successMessage}
+          {t(successMessage.key, successMessage.options)}
         </div>
       )}
 
       {!isAdmin && (
         <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 px-4 py-3 rounded-lg flex items-center gap-2">
           <ExclamationTriangleIcon className="w-5 h-5" />
-          You have read-only access. Contact an administrator to make changes.
+          {t('You have read-only access. Contact an administrator to make changes.')}
         </div>
       )}
 
@@ -192,20 +200,20 @@ export function SettingsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <BuildingOfficeIcon className="w-5 h-5 text-gray-500" />
-              Organization
+              {t('Organization')}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               <Input
-                label="Organization Name"
+                label={t('Organization Name')}
                 value={formData.name || ''}
                 onChange={(e) => handleInputChange('name', e.target.value)}
                 disabled={!isAdmin}
               />
               <div>
                 <label htmlFor="organization-timezone" className="block text-sm font-medium text-gray-700 mb-1">
-                  Timezone
+                  {t('Timezone')}
                 </label>
                 <select
                   id="organization-timezone"
@@ -216,15 +224,15 @@ export function SettingsPage() {
                 >
                   {TIMEZONES.map((tz) => (
                     <option key={tz.value} value={tz.value}>
-                      {tz.label}
+                      {t(tz.label)}
                     </option>
                   ))}
                 </select>
               </div>
               {orgSettings && (
                 <div className="pt-2 text-sm text-gray-500">
-                  <p>Slug: {orgSettings.slug}</p>
-                  <p>Created: {new Date(orgSettings.created_at).toLocaleDateString()}</p>
+                  <p>{t('Slug')}: {orgSettings.slug}</p>
+                  <p>{t('Created')}: {formatShortDate(orgSettings.created_at)}</p>
                 </div>
               )}
             </div>
@@ -236,21 +244,21 @@ export function SettingsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <ClockIcon className="w-5 h-5 text-gray-500" />
-              Work Hours
+              {t('Work Hours')}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <Input
-                  label="Start Time"
+                  label={t('Start Time')}
                   type="time"
                   value={formData.settings?.work_start_time ?? '09:00'}
                   onChange={(e) => handleSettingsChange('work_start_time', e.target.value)}
                   disabled={!isAdmin}
                 />
                 <Input
-                  label="End Time"
+                  label={t('End Time')}
                   type="time"
                   value={formData.settings?.work_end_time ?? '17:00'}
                   onChange={(e) => handleSettingsChange('work_end_time', e.target.value)}
@@ -258,7 +266,7 @@ export function SettingsPage() {
                 />
               </div>
               <Input
-                label="Late Threshold (minutes)"
+                label={t('Late Threshold (minutes)')}
                 type="number"
                 min={0}
                 max={120}
@@ -267,7 +275,7 @@ export function SettingsPage() {
                 disabled={!isAdmin}
               />
               <p className="text-sm text-gray-500">
-                Employees arriving more than {formData.settings?.late_threshold_minutes ?? 15} minutes after start time will be marked as late.
+                {t('Employees arriving more than {{minutes}} minutes after start time will be marked as late.', { minutes: formData.settings?.late_threshold_minutes ?? 15 })}
               </p>
             </div>
           </CardContent>
@@ -278,7 +286,7 @@ export function SettingsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <ShieldCheckIcon className="w-5 h-5 text-gray-500" />
-              Security & Verification
+              {t('Security & Verification')}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -292,8 +300,8 @@ export function SettingsPage() {
                   className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                 />
                 <div>
-                  <span className="text-sm font-medium text-gray-700">Require Liveness Detection</span>
-                  <p className="text-xs text-gray-500">Prevents photo/video spoofing attacks</p>
+                  <span className="text-sm font-medium text-gray-700">{t('Require Liveness Detection')}</span>
+                  <p className="text-xs text-gray-500">{t('Prevents photo/video spoofing attacks')}</p>
                 </div>
               </label>
 
@@ -302,7 +310,7 @@ export function SettingsPage() {
                   htmlFor="liveness-threshold"
                   className="block text-sm font-medium text-gray-700 mb-1"
                 >
-                  Liveness Threshold ({((formData.settings?.liveness_threshold ?? 0.8) * 100).toFixed(0)}%)
+                  {t('Liveness Threshold ({{percent}}%)', { percent: ((formData.settings?.liveness_threshold ?? 0.8) * 100).toFixed(0) })}
                 </label>
                 <input
                   id="liveness-threshold"
@@ -322,7 +330,7 @@ export function SettingsPage() {
                   htmlFor="face-match-threshold"
                   className="block text-sm font-medium text-gray-700 mb-1"
                 >
-                  Face Match Threshold ({((formData.settings?.face_match_threshold ?? 0.75) * 100).toFixed(0)}%)
+                  {t('Face Match Threshold ({{percent}}%)', { percent: ((formData.settings?.face_match_threshold ?? 0.75) * 100).toFixed(0) })}
                 </label>
                 <input
                   id="face-match-threshold"
@@ -336,8 +344,8 @@ export function SettingsPage() {
                   className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                 />
                 <div className="flex justify-between text-xs text-gray-500 mt-1">
-                  <span>More lenient</span>
-                  <span>More strict</span>
+                  <span>{t('More lenient')}</span>
+                  <span>{t('More strict')}</span>
                 </div>
               </div>
             </div>
@@ -349,7 +357,7 @@ export function SettingsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <ServerIcon className="w-5 h-5 text-gray-500" />
-              System Status
+              {t('System Status')}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -357,17 +365,17 @@ export function SettingsPage() {
               {systemInfo ? (
                 <>
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Version</span>
+                    <span className="text-gray-600">{t('Version')}</span>
                     <span className="font-medium">{systemInfo.version}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Environment</span>
+                    <span className="text-gray-600">{t('Environment')}</span>
                     <span className="px-2 py-1 bg-gray-100 rounded text-sm font-medium">
                       {systemInfo.environment}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Database</span>
+                    <span className="text-gray-600">{t('Database')}</span>
                     <span className={`flex items-center gap-1 ${
                       systemInfo.database_status === 'connected' ? 'text-green-600' : 'text-red-600'
                     }`}>
@@ -376,11 +384,11 @@ export function SettingsPage() {
                       ) : (
                         <XCircleIcon className="w-4 h-4" />
                       )}
-                      {systemInfo.database_status}
+                      {t(systemInfo.database_status)}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Face Service</span>
+                    <span className="text-gray-600">{t('Face Service')}</span>
                     <span className={`flex items-center gap-1 ${
                       systemInfo.face_service_status === 'online' ? 'text-green-600' : 
                       systemInfo.face_service_status === 'offline' ? 'text-red-600' : 'text-gray-600'
@@ -390,15 +398,15 @@ export function SettingsPage() {
                       ) : systemInfo.face_service_status === 'offline' ? (
                         <XCircleIcon className="w-4 h-4" />
                       ) : null}
-                      {systemInfo.face_service_status}
+                      {t(systemInfo.face_service_status)}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Total Users</span>
+                    <span className="text-gray-600">{t('Total Users')}</span>
                     <span className="font-medium">{systemInfo.total_users}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Total Devices</span>
+                    <span className="text-gray-600">{t('Total Devices')}</span>
                     <span className="font-medium">{systemInfo.total_devices}</span>
                   </div>
                   {isAdmin && (
@@ -408,15 +416,15 @@ export function SettingsPage() {
                       isLoading={testMutation.isPending}
                       className="w-full mt-2"
                     >
-                      Test Face Service
+                      {t('Test Face Service')}
                     </Button>
                   )}
                 </>
               ) : (
                 <div className="text-center py-4">
-                  <p className="text-gray-500">System info not available</p>
+                  <p className="text-gray-500">{t('System info not available')}</p>
                   <p className="text-sm text-gray-400 mt-1">
-                    Settings endpoints may not be configured
+                    {t('Settings endpoints may not be configured')}
                   </p>
                 </div>
               )}
@@ -433,11 +441,9 @@ export function SettingsPage() {
               <Cog6ToothIcon className="w-6 h-6 text-primary-600" />
             </div>
             <div>
-              <h3 className="font-medium text-gray-900">About Settings</h3>
+              <h3 className="font-medium text-gray-900">{t('About Settings')}</h3>
               <p className="text-sm text-gray-500 mt-1">
-                These settings affect how FaceLogix operates for your organization. 
-                Changes to work hours and thresholds will apply to all future attendance records.
-                Security settings affect the face recognition verification process.
+                {t('These settings affect how FaceLogix operates for your organization. Changes to work hours and thresholds will apply to all future attendance records. Security settings affect the face recognition verification process.')}
               </p>
             </div>
           </div>

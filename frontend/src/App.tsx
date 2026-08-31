@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Routes, Route, Navigate, useLocation } from 'react-router';
 import { useAuthStore } from '@/stores/authStore';
 import { LoginPage } from '@/pages/LoginPage';
@@ -6,6 +7,7 @@ import { CheckInPage } from '@/pages/CheckInPage';
 import { Loading } from '@/components/ui/Loading';
 import { OPERATOR_ROLES } from '@/types/roles';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { translate as t } from '@/i18n';
 
 const DashboardPage = lazy(() =>
   import('@/pages/DashboardPage').then((module) => ({ default: module.DashboardPage }))
@@ -62,7 +64,7 @@ function AdminRoute({ children }: AdminRouteProps) {
 
   return (
     <AppLayout>
-      <Suspense fallback={<Loading size="lg" text="Loading page..." />}>
+      <Suspense fallback={<Loading size="lg" text={t('Loading page...')} />}>
         {children}
       </Suspense>
     </AppLayout>
@@ -87,6 +89,7 @@ function PublicRoute({ children }: PublicRouteProps) {
 }
 
 function App() {
+  useTranslation();
   return (
     <Routes>
       {/* Public Routes */}

@@ -13,6 +13,7 @@ import { Loading } from '@/components/ui/Loading';
 import { Button } from '@/components/ui/Button';
 import { reportsApi } from '@/services/reports';
 import { queryKeys } from '@/lib/queryClient';
+import { translate as t } from '@/i18n';
 
 export function DashboardPage() {
   const {
@@ -28,7 +29,7 @@ export function DashboardPage() {
   if (isPending) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loading size="lg" text="Loading dashboard..." />
+        <Loading size="lg" text={t('Loading dashboard...')} />
       </div>
     );
   }
@@ -44,7 +45,7 @@ export function DashboardPage() {
           className="mt-4"
           onClick={() => void refetch()}
         >
-          Try again
+          {t('Try again')}
         </Button>
       </div>
     );
@@ -60,8 +61,8 @@ export function DashboardPage() {
     <div className="space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-500 mt-1">Welcome back! Here's today's overview.</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t('Dashboard')}</h1>
+          <p className="text-gray-500 mt-1">{t("Welcome back! Here's today's overview.")}</p>
         </div>
 
         {/* Stats Grid */}
@@ -73,7 +74,7 @@ export function DashboardPage() {
                 <UsersIcon className="w-6 h-6 text-blue-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Total Users</p>
+                <p className="text-sm font-medium text-gray-500">{t('Total Users')}</p>
                 <p className="text-2xl font-bold text-gray-900">
                   {stats?.total_users || 0}
                 </p>
@@ -88,7 +89,7 @@ export function DashboardPage() {
                 <DeviceTabletIcon className="w-6 h-6 text-green-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Active Devices</p>
+                <p className="text-sm font-medium text-gray-500">{t('Active Devices')}</p>
                 <p className="text-2xl font-bold text-gray-900">
                   {stats?.active_devices || 0}
                 </p>
@@ -103,7 +104,7 @@ export function DashboardPage() {
                 <ClipboardDocumentCheckIcon className="w-6 h-6 text-purple-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Today's Check-ins</p>
+                <p className="text-sm font-medium text-gray-500">{t("Today's Check-ins")}</p>
                 <p className="text-2xl font-bold text-gray-900">
                   {today?.checked_in || 0}
                 </p>
@@ -126,7 +127,7 @@ export function DashboardPage() {
                 )}
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Attendance Rate</p>
+                <p className="text-sm font-medium text-gray-500">{t('Attendance Rate')}</p>
                 <p className="text-2xl font-bold text-gray-900">{attendanceRate}%</p>
               </div>
             </div>
@@ -138,34 +139,34 @@ export function DashboardPage() {
           {/* Daily Stats */}
           <Card>
             <CardHeader>
-              <CardTitle>Today's Summary</CardTitle>
+              <CardTitle>{t("Today's Summary")}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Total Employees</span>
+                  <span className="text-gray-600">{t('Total Employees')}</span>
                   <span className="font-medium">{today?.total_employees || 0}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Checked In</span>
+                  <span className="text-gray-600">{t('Checked In')}</span>
                   <span className="font-medium text-green-600">
                     {today?.checked_in || 0}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Checked Out</span>
+                  <span className="text-gray-600">{t('Checked Out')}</span>
                   <span className="font-medium text-blue-600">
                     {today?.checked_out || 0}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Absent</span>
+                  <span className="text-gray-600">{t('Absent')}</span>
                   <span className="font-medium text-red-600">
                     {today?.absent || 0}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Late Arrivals</span>
+                  <span className="text-gray-600">{t('Late Arrivals')}</span>
                   <span className="font-medium text-yellow-600">
                     {today?.late_arrivals || 0}
                   </span>
@@ -177,25 +178,25 @@ export function DashboardPage() {
           {/* Pending Enrollments */}
           <Card>
             <CardHeader>
-              <CardTitle>Quick Stats</CardTitle>
+              <CardTitle>{t('Quick Stats')}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Pending Face Enrollments</span>
+                  <span className="text-gray-600">{t('Pending Face Enrollments')}</span>
                   <span className="font-medium text-orange-600">
                     {stats?.pending_enrollments || 0}
                   </span>
                 </div>
                 {today?.average_check_in_time && (
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Avg Check-in Time</span>
+                    <span className="text-gray-600">{t('Avg Check-in Time')}</span>
                     <span className="font-medium">{today.average_check_in_time}</span>
                   </div>
                 )}
                 {today?.average_check_out_time && (
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Avg Check-out Time</span>
+                    <span className="text-gray-600">{t('Avg Check-out Time')}</span>
                     <span className="font-medium">{today.average_check_out_time}</span>
                   </div>
                 )}
@@ -207,12 +208,12 @@ export function DashboardPage() {
         {/* Recent Activity */}
         <Card>
           <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
+            <CardTitle>{t('Recent Activity')}</CardTitle>
           </CardHeader>
           <CardContent>
             <AttendanceList
               logs={stats?.recent_activity || []}
-              emptyMessage="No recent activity"
+              emptyMessage={t('No recent activity')}
             />
           </CardContent>
       </Card>

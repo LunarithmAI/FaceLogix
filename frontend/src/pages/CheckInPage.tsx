@@ -11,6 +11,8 @@ import { Button } from '@/components/ui/Button';
 import { useCheckIn } from '@/hooks/useCheckIn';
 import { useAuthStore } from '@/stores/authStore';
 import type { CheckType } from '@/types/attendance';
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
+import { translate as t } from '@/i18n';
 
 export function CheckInPage() {
   const user = useAuthStore((state) => state.user);
@@ -69,24 +71,27 @@ export function CheckInPage() {
   return (
     <div className="safe-top safe-bottom min-h-screen bg-gray-50">
       <header className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-lg items-center justify-between gap-4 px-4 py-3">
+        <div className="mx-auto flex max-w-lg flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div>
             <h1 className="text-xl font-semibold text-gray-900">FaceLogix</h1>
             {user !== null && <p className="text-sm text-gray-500">{user.name}</p>}
           </div>
-          <Button type="button" variant="secondary" size="sm" onClick={toggleMode}>
-            {mode === 'check_in' ? (
-              <>
-                <ArrowLeftOnRectangleIcon className="mr-2 h-4 w-4" aria-hidden="true" />
-                Check Out
-              </>
-            ) : (
-              <>
-                <ArrowRightOnRectangleIcon className="mr-2 h-4 w-4" aria-hidden="true" />
-                Check In
-              </>
-            )}
-          </Button>
+          <div className="flex items-center gap-2">
+            <LanguageSwitcher compact />
+            <Button type="button" variant="secondary" size="sm" onClick={toggleMode}>
+              {mode === 'check_in' ? (
+                <>
+                  <ArrowLeftOnRectangleIcon className="mr-2 h-4 w-4" aria-hidden="true" />
+                  {t('Check Out')}
+                </>
+              ) : (
+                <>
+                  <ArrowRightOnRectangleIcon className="mr-2 h-4 w-4" aria-hidden="true" />
+                  {t('Check In')}
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -104,7 +109,7 @@ export function CheckInPage() {
             ) : (
               <ArrowLeftOnRectangleIcon className="h-5 w-5" aria-hidden="true" />
             )}
-            {mode === 'check_in' ? 'Check In Mode' : 'Check Out Mode'}
+            {mode === 'check_in' ? t('Check In Mode') : t('Check Out Mode')}
           </span>
         </div>
 
@@ -118,12 +123,12 @@ export function CheckInPage() {
 
         {captureError !== null && (
           <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800" role="alert">
-            {captureError}
+            {t(captureError)}
           </div>
         )}
         {error !== null && (
           <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert">
-            {error.message}
+            {t(error.message)}
           </div>
         )}
 
@@ -137,7 +142,7 @@ export function CheckInPage() {
               className="mt-4 w-full"
               leftIcon={<ArrowPathIcon className="h-5 w-5" aria-hidden="true" />}
             >
-              Reset
+              {t('Reset')}
             </Button>
           </div>
         ) : (
@@ -148,7 +153,7 @@ export function CheckInPage() {
             onClick={handleAction}
             disabled={isLoading}
             isLoading={isLoading}
-            loadingText="Processing"
+            loadingText={t('Processing')}
             className="w-full touch-manipulation select-none rounded-xl font-semibold"
             leftIcon={
               mode === 'check_in' ? (
@@ -158,13 +163,13 @@ export function CheckInPage() {
               )
             }
           >
-            {mode === 'check_in' ? 'Check In' : 'Check Out'}
+            {mode === 'check_in' ? t('Check In') : t('Check Out')}
           </Button>
         )}
 
         <div className="mt-8 text-center text-sm text-gray-500">
-          <p>Position your face within the oval guide.</p>
-          <p className="mt-1">Use even lighting and keep the camera steady.</p>
+          <p>{t('Position your face within the oval guide.')}</p>
+          <p className="mt-1">{t('Use even lighting and keep the camera steady.')}</p>
         </div>
       </main>
     </div>

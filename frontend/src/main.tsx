@@ -6,9 +6,11 @@ import App from './App';
 import './styles/globals.css';
 import { queryClient } from '@/lib/queryClient';
 import { clearLegacyApiCaches } from '@/lib/session';
+import '@/i18n';
 
 
 void clearLegacyApiCaches();
+
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

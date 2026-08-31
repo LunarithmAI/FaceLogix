@@ -15,6 +15,7 @@ import type {
   UserImportPreview,
   UserImportResult,
 } from '@/types/user';
+import { translate as t } from '@/i18n';
 
 const MAX_PACKAGE_BYTES = 128 * 1024 * 1024;
 const CSV_TEMPLATE =
@@ -163,9 +164,9 @@ export function UserImportModal({ isOpen, onClose, onSuccess }: UserImportModalP
         }}
         disabled={packageFile === null}
         isLoading={previewMutation.isPending}
-        loadingText="Reviewing package"
+        loadingText={t('Reviewing package')}
       >
-        Review package
+        {t('Review package')}
       </Button>
     ) : (
       <Button
@@ -173,9 +174,9 @@ export function UserImportModal({ isOpen, onClose, onSuccess }: UserImportModalP
         onClick={() => importMutation.mutate()}
         disabled={preview.error_count > 0 || !allConflictsResolved || importableCount === 0}
         isLoading={importMutation.isPending}
-        loadingText="Importing people"
+        loadingText={t('Importing people')}
       >
-        Import {importableCount} {importableCount === 1 ? 'person' : 'people'}
+        {t(importableCount === 1 ? 'Import {{count}} person' : 'Import {{count}} people', { count: importableCount })}
       </Button>
     );
 
@@ -183,22 +184,21 @@ export function UserImportModal({ isOpen, onClose, onSuccess }: UserImportModalP
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title="Import people"
-      description="Review one ZIP package, resolve every existing-person match, then import atomically."
+      title={t('Import people')}
+      description={t('Review one ZIP package, resolve every existing-person match, then import atomically.')}
       size="full"
       showCloseButton={!importMutation.isPending}
     >
       {result !== null ? (
         <div className="py-4 text-center" role="status" aria-live="polite">
           <CheckCircleIcon className="mx-auto h-12 w-12 text-green-600" aria-hidden="true" />
-          <h3 className="mt-4 text-lg font-semibold text-gray-900">Import complete</h3>
+          <h3 className="mt-4 text-lg font-semibold text-gray-900">{t('Import complete')}</h3>
           <p className="mx-auto mt-2 max-w-xl text-sm text-gray-600">
-            Created {result.created_count}, replaced {result.replaced_count}, and skipped{' '}
-            {result.skipped_count} people. Stored {result.embeddings_count} face embeddings.
+            {t('Created {{created}}, replaced {{replaced}}, and skipped {{skipped}} people. Stored {{embeddings}} face embeddings.', { created: result.created_count, replaced: result.replaced_count, skipped: result.skipped_count, embeddings: result.embeddings_count })}
           </p>
           <ModalFooter>
             <Button type="button" onClick={handleClose}>
-              Close
+              {t('Close')}
             </Button>
           </ModalFooter>
         </div>
@@ -208,12 +208,10 @@ export function UserImportModal({ isOpen, onClose, onSuccess }: UserImportModalP
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h3 id="package-format-heading" className="font-semibold text-gray-900">
-                  Package format
+                  {t('Package format')}
                 </h3>
                 <p className="mt-1 max-w-2xl text-sm text-gray-600">
-                  Put <strong>people.csv</strong> at the ZIP root. Each row needs an external ID,
-                  name, and image_1 path. Email, department, and image_2 through image_5 are
-                  optional. Every imported account is a member.
+                  {t('Put people.csv at the ZIP root. Each row needs an external ID, name, and image_1 path. Email, department, and image_2 through image_5 are optional. Every imported account is a member.')}
                 </p>
               </div>
               <Button
@@ -224,20 +222,20 @@ export function UserImportModal({ isOpen, onClose, onSuccess }: UserImportModalP
                 onClick={downloadCsvTemplate}
                 className="shrink-0"
               >
-                Download CSV template
+                {t('Download CSV template')}
               </Button>
             </div>
             <ul className="mt-3 grid gap-1 text-sm text-gray-600 sm:grid-cols-2">
-              <li>Up to 100 people per package</li>
-              <li>JPEG or PNG; 1–5 images per person</li>
-              <li>10 MB maximum per image</li>
-              <li>128 MB maximum ZIP size</li>
+              <li>{t('Up to 100 people per package')}</li>
+              <li>{t('JPEG or PNG; 1–5 images per person')}</li>
+              <li>{t('10 MB maximum per image')}</li>
+              <li>{t('128 MB maximum ZIP size')}</li>
             </ul>
           </section>
 
           <section className="mt-5 border-t border-gray-200 pt-5" aria-labelledby="upload-heading">
             <h3 id="upload-heading" className="font-semibold text-gray-900">
-              Select package
+              {t('Select package')}
             </h3>
             <label
               htmlFor="people-import-package"
@@ -245,11 +243,11 @@ export function UserImportModal({ isOpen, onClose, onSuccess }: UserImportModalP
             >
               <ArrowUpTrayIcon className="h-8 w-8 text-gray-500" aria-hidden="true" />
               <span className="mt-2 text-sm font-medium text-gray-900">
-                {packageFile === null ? 'Choose a ZIP package' : packageFile.name}
+                {packageFile === null ? t('Choose a ZIP package') : packageFile.name}
               </span>
               <span className="mt-1 text-xs text-gray-500">
                 {packageFile === null
-                  ? 'The package is checked before any database changes.'
+                  ? t('The package is checked before any database changes.')
                   : formatBytes(packageFile.size)}
               </span>
               <input
@@ -266,7 +264,7 @@ export function UserImportModal({ isOpen, onClose, onSuccess }: UserImportModalP
 
           {requestError !== null && (
             <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
-              {requestError}
+              {t(requestError)}
             </div>
           )}
 
@@ -275,17 +273,16 @@ export function UserImportModal({ isOpen, onClose, onSuccess }: UserImportModalP
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h3 id="review-heading" className="font-semibold text-gray-900">
-                    Review {preview.total_rows} CSV rows
+                    {t('Review {{rows}} CSV rows', { rows: preview.total_rows })}
                   </h3>
                   <p className="mt-1 text-sm text-gray-600">
-                    {preview.ready_count} new, {preview.conflict_count} existing-person matches,{' '}
-                    {preview.error_count} errors.
+                    {t('{{newCount}} new, {{conflicts}} existing-person matches, {{errors}} errors.', { newCount: preview.ready_count, conflicts: preview.conflict_count, errors: preview.error_count })}
                   </p>
                 </div>
                 {preview.error_count === 0 && preview.conflict_count === 0 && (
                   <span className="inline-flex items-center gap-2 text-sm font-medium text-green-700">
                     <DocumentCheckIcon className="h-5 w-5" aria-hidden="true" />
-                    Ready to import
+                    {t('Ready to import')}
                   </span>
                 )}
               </div>
@@ -294,13 +291,13 @@ export function UserImportModal({ isOpen, onClose, onSuccess }: UserImportModalP
                 <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-900" role="alert">
                   <div className="flex items-center gap-2 font-medium">
                     <ExclamationTriangleIcon className="h-5 w-5 shrink-0" aria-hidden="true" />
-                    Fix these package errors and review the ZIP again
+                    {t('Fix these package errors and review the ZIP again')}
                   </div>
                   <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
                     {preview.errors.map((error, index) => (
                       <li key={`${error.row ?? 'package'}-${error.code}-${index}`}>
-                        {error.row === null ? '' : `Row ${error.row}: `}
-                        {error.message}
+                        {error.row === null ? '' : t('Row {{row}}: ', { row: error.row })}
+                        {t(error.message)}
                       </li>
                     ))}
                   </ul>
@@ -310,20 +307,19 @@ export function UserImportModal({ isOpen, onClose, onSuccess }: UserImportModalP
               {preview.conflicts.length > 0 && (
                 <div className="mt-4" aria-labelledby="conflicts-heading">
                   <h4 id="conflicts-heading" className="text-sm font-semibold text-gray-900">
-                    Resolve existing-person matches
+                    {t('Resolve existing-person matches')}
                   </h4>
                   <p className="mt-1 text-sm text-gray-600">
-                    Choose what to do for each match. Replace updates member profile fields and face
-                    enrollment; skip leaves the existing person unchanged.
+                    {t('Choose what to do for each match. Replace updates member profile fields and face enrollment; skip leaves the existing person unchanged.')}
                   </p>
-                  <div className="mt-3 max-h-80 divide-y divide-gray-200 overflow-y-auto rounded-lg border border-gray-200" tabIndex={0} aria-label="Import conflicts">
+                  <div className="mt-3 max-h-80 divide-y divide-gray-200 overflow-y-auto rounded-lg border border-gray-200" tabIndex={0} aria-label={t('Import conflicts')}>
                     {preview.conflicts.map((conflict) => (
                       <fieldset key={conflict.row} className="p-4">
                         <legend className="text-sm font-semibold text-gray-900">
-                          Row {conflict.row}: {conflict.name}
+                          {t('Row {{row}}: {{name}}', { row: conflict.row, name: conflict.name })}
                         </legend>
                         <p className="mt-1 text-sm text-gray-600">
-                          External ID {conflict.external_id} matches {conflict.existing_name}.
+                          {t('External ID {{externalId}} matches {{name}}.', { externalId: conflict.external_id, name: conflict.existing_name })}
                         </p>
                         <div className="mt-3 grid gap-2 sm:grid-cols-2">
                           <label
@@ -346,7 +342,7 @@ export function UserImportModal({ isOpen, onClose, onSuccess }: UserImportModalP
                                 }))
                               }
                             />
-                            Skip this row
+                            {t('Skip this row')}
                           </label>
                           {conflict.allowed_actions.includes('replace') ? (
                             <label
@@ -369,11 +365,11 @@ export function UserImportModal({ isOpen, onClose, onSuccess }: UserImportModalP
                                   }))
                                 }
                               />
-                              Replace profile and faces
+                              {t('Replace profile and faces')}
                             </label>
                           ) : (
                             <p className="flex min-h-11 items-center rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-600">
-                              Elevated accounts cannot be replaced in bulk.
+                              {t('Elevated accounts cannot be replaced in bulk.')}
                             </p>
                           )}
                         </div>
@@ -387,8 +383,7 @@ export function UserImportModal({ isOpen, onClose, onSuccess }: UserImportModalP
 
           {importMutation.isPending && (
             <div className="mt-4 rounded-lg bg-primary-50 px-4 py-3 text-sm text-primary-900" role="status" aria-live="polite">
-              Analyzing every face and applying the import. Keep this dialog open; no database changes
-              are saved unless the whole package succeeds.
+              {t('Analyzing every face and applying the import. Keep this dialog open; no database changes are saved unless the whole package succeeds.')}
             </div>
           )}
 
@@ -401,7 +396,7 @@ export function UserImportModal({ isOpen, onClose, onSuccess }: UserImportModalP
                 onClick={handleClose}
                 disabled={importMutation.isPending}
               >
-                Cancel
+                {t('Cancel')}
               </Button>
             </div>
             <div className="hidden items-center justify-end gap-3 sm:flex">
@@ -411,7 +406,7 @@ export function UserImportModal({ isOpen, onClose, onSuccess }: UserImportModalP
                 onClick={handleClose}
                 disabled={importMutation.isPending}
               >
-                Cancel
+                {t('Cancel')}
               </Button>
               {renderPrimaryAction()}
             </div>

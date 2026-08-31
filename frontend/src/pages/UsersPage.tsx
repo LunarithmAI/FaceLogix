@@ -16,6 +16,7 @@ import { queryClient, queryKeys } from '@/lib/queryClient';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useAuthStore } from '@/stores/authStore';
 import { ADMIN_ROLES } from '@/types/roles';
+import { translate as t } from '@/i18n';
 
 export function UsersPage() {
   const currentUser = useAuthStore((state) => state.user);
@@ -120,8 +121,8 @@ export function UsersPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Users</h1>
-            <p className="text-gray-500 mt-1">Manage user accounts and face enrollments</p>
+            <h1 className="text-2xl font-bold text-gray-900">{t('Users')}</h1>
+            <p className="text-gray-500 mt-1">{t('Manage user accounts and face enrollments')}</p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button
@@ -129,20 +130,20 @@ export function UsersPage() {
               leftIcon={<ArrowUpTrayIcon className="h-5 w-5" aria-hidden="true" />}
               onClick={() => setIsImportOpen(true)}
             >
-              Import People
+              {t('Import People')}
             </Button>
             <Button
               leftIcon={<PlusIcon className="h-5 w-5" aria-hidden="true" />}
               onClick={handleCreate}
             >
-              Add User
+              {t('Add User')}
             </Button>
           </div>
         </div>
 
         {actionError !== null && (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700" role="alert">
-            {actionError.message}
+            {t(actionError.message)}
           </div>
         )}
 
@@ -154,7 +155,7 @@ export function UsersPage() {
                 <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <Input
                   type="search"
-                  placeholder="Search users..."
+                  placeholder={t('Search users...')}
                   value={search}
                   onChange={(e) => handleSearch(e.target.value)}
                   className="pl-10"
@@ -168,17 +169,17 @@ export function UsersPage() {
         <Card>
           {usersQuery.isPending ? (
             <div className="py-12">
-              <Loading size="lg" text="Loading users..." />
+              <Loading size="lg" text={t('Loading users...')} />
             </div>
           ) : usersQuery.error !== null ? (
             <div className="p-6 text-center text-red-700" role="alert">
-              <p>{usersQuery.error.message}</p>
+              <p>{t(usersQuery.error.message)}</p>
               <Button
                 variant="secondary"
                 className="mt-4"
                 onClick={() => void usersQuery.refetch()}
               >
-                Try again
+                {t('Try again')}
               </Button>
             </div>
           ) : (
@@ -195,7 +196,7 @@ export function UsersPage() {
               {users && users.pages > 1 && (
                 <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200">
                   <p className="text-sm text-gray-500">
-                    Page {users.page} of {users.pages} ({users.total} users)
+                    {t('Page')} {users.page} {t('of')} {users.pages} ({users.total} {t('users')})
                   </p>
                   <div className="flex gap-2">
                     <Button
@@ -204,7 +205,7 @@ export function UsersPage() {
                       onClick={() => setPage(page - 1)}
                       disabled={page === 1}
                     >
-                      Previous
+                      {t('Previous')}
                     </Button>
                     <Button
                       variant="secondary"
@@ -212,7 +213,7 @@ export function UsersPage() {
                       onClick={() => setPage(page + 1)}
                       disabled={page === users.pages}
                     >
-                      Next
+                      {t('Next')}
                     </Button>
                   </div>
                 </div>
@@ -226,7 +227,7 @@ export function UsersPage() {
       <Modal
         isOpen={isFormOpen}
         onClose={() => setIsFormOpen(false)}
-        title={selectedUser ? 'Edit User' : 'Create User'}
+        title={selectedUser ? t('Edit User') : t('Create User')}
         size="lg"
       >
         <UserForm
@@ -243,9 +244,9 @@ export function UsersPage() {
         isOpen={isDeleteOpen}
         onClose={() => setIsDeleteOpen(false)}
         onConfirm={handleConfirmDelete}
-        title="Delete User"
-        message={`Are you sure you want to delete ${selectedUser?.name}? This action cannot be undone.`}
-        confirmText="Delete"
+        title={t('Delete User')}
+        message={t('Are you sure you want to delete {{name}}? This action cannot be undone.', { name: selectedUser?.name })}
+        confirmText={t('Delete')}
         variant="danger"
         isLoading={isSubmitting}
       />

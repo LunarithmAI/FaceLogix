@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { UserRole } from '@/types/roles';
+import { translate as t } from '@/i18n';
 
 type BadgeVariant = 'default' | 'primary' | 'success' | 'warning' | 'danger' | 'info';
 type BadgeSize = 'sm' | 'md' | 'lg';
@@ -74,7 +75,7 @@ export function StatusBadge({ status }: { status: 'active' | 'inactive' | 'pendi
 
   return (
     <Badge variant={variant} dot>
-      {label}
+      {t(label)}
     </Badge>
   );
 }
@@ -89,7 +90,7 @@ export function RoleBadge({ role }: { role: UserRole }) {
 
   const { variant, label } = config[role];
 
-  return <Badge variant={variant}>{label}</Badge>;
+  return <Badge variant={variant}>{t(label)}</Badge>;
 }
 
 export default Badge;
