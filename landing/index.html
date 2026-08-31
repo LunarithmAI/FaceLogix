@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f2f5f4" />
+    <meta
+      name="description"
+      content="FaceLogix is a self-hosted face-recognition attendance system with liveness checks, private biometric processing, and complete operations tooling."
+    />
+    <meta property="og:title" content="FaceLogix | Attendance, verified" />
+    <meta
+      property="og:description"
+      content="A self-hosted attendance system that verifies the person, records the event, and keeps biometric processing under your control."
+    />
+    <meta property="og:type" content="website" />
+    <title>FaceLogix | Attendance, verified</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="./app.js" defer></script>
+  </head>
+  <body>
+    <!--
+      THESIS: Attendance becomes a visible verification record, refusing both generic SaaS dashboards and biometric spectacle.
+      OWN-WORLD: Cold calibration paper, graphite key lines, cobalt registration fields, sharp corners, and exact measurement typography.
+      STORY: See a person verified, understand the private processing boundary, inspect the operations loop, then open the repository.
+      FIRST VIEWPORT: A compact rail frames a split sheet with the promise at left, a live verification trace at right, and the primary action above the fold.
+      FORM: Calibration Record, seventh grounded direction, seed 76034772.
+      FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
+    -->
+    <a class="skip-link" href="#main-content">Skip to content</a>
+
+    <header class="site-header" aria-label="Primary navigation">
+      <a class="wordmark" href="#top" aria-label="FaceLogix home">
+        <span class="wordmark-mark" aria-hidden="true"><span></span></span>
+        <span>FaceLogix</span>
+      </a>
+
+      <nav class="desktop-nav" aria-label="Page sections">
+        <a href="#workflow">Workflow</a>
+        <a href="#architecture">Architecture</a>
+        <a href="#privacy">Privacy</a>
+      </nav>
+
+      <a class="header-action" href="https://github.com/LunarithmAI/FaceLogix">View on GitHub</a>
+
+      <details class="mobile-menu">
+        <summary>Menu</summary>
+        <nav aria-label="Mobile page sections">
+          <a href="#workflow">Workflow</a>
+          <a href="#architecture">Architecture</a>
+          <a href="#privacy">Privacy</a>
+          <a href="https://github.com/LunarithmAI/FaceLogix">View on GitHub</a>
+        </nav>
+      </details>
+    </header>
+
+    <main id="main-content">
+      <section class="hero" id="top" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <h1 id="hero-title">Attendance, verified.</h1>
+          <p>
+            FaceLogix gives operations teams self-hosted employee check-ins and check-outs with liveness checks and controlled biometric processing.
+          </p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="https://github.com/LunarithmAI/FaceLogix">View on GitHub</a>
+            <a class="text-link" href="#workflow">Inspect the workflow</a>
+          </div>
+        </div>
+
+        <div class="verification-stage" aria-label="Illustrative FaceLogix verification sequence">
+          <div class="stage-header">
+            <span>Verification record</span>
+            <span class="record-id">FLX-2048</span>
+          </div>
+          <div class="scan-frame">
+            <canvas id="face-trace" width="720" height="620" aria-hidden="true"></canvas>
+            <div class="scan-grid" aria-hidden="true"></div>
+            <div class="scan-line" aria-hidden="true"></div>
+            <p class="demo-label">Illustrative sequence</p>
+          </div>
+          <div class="verification-state" aria-live="polite">
+            <span class="state-index">A</span>
+            <div>
+              <strong id="verification-title">Ready to verify</strong>
+              <span id="verification-detail">No image retained</span>
+            </div>
+            <button class="verify-button" id="verify-button" type="button">Run check</button>
+          </div>
+          <div class="measurement-row" aria-hidden="true">
+            <span>LIVENESS</span>
+            <span>QUALITY</span>
+            <span>MATCH</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="workflow section" id="workflow" aria-labelledby="workflow-title">
+        <div class="section-heading">
+          <h2 id="workflow-title">One arrival. Three accountable steps.</h2>
+          <p>Every check-in moves through the same explicit path, from capture to a reportable attendance event.</p>
+        </div>
+
+        <ol class="workflow-track">
+          <li>
+            <span class="step-marker">Capture</span>
+            <div>
+              <h3>Confirm a usable face</h3>
+              <p>Image-quality checks reject poor captures before recognition begins.</p>
+            </div>
+          </li>
+          <li>
+            <span class="step-marker">Verify</span>
+            <div>
+              <h3>Test liveness and identity</h3>
+              <p>Internal ONNX models detect spoofing and compare the face embedding.</p>
+            </div>
+          </li>
+          <li>
+            <span class="step-marker">Record</span>
+            <div>
+              <h3>Write the attendance event</h3>
+              <p>A successful check becomes an organization-scoped check-in or check-out.</p>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <section class="architecture section" id="architecture" aria-labelledby="architecture-title">
+        <div class="architecture-copy">
+          <h2 id="architecture-title">A deployment boundary you can explain.</h2>
+          <p>
+            The web app, API, face inference, and PostgreSQL database ship as one coherent Docker Compose deployment behind your own TLS edge.
+          </p>
+          <a class="text-link light-link" href="https://github.com/LunarithmAI/FaceLogix#production-deployment">Read the deployment guide</a>
+        </div>
+
+        <div class="system-map" aria-label="FaceLogix system architecture">
+          <div class="map-node map-device">
+            <span class="node-type">Device</span>
+            <strong>React PWA</strong>
+            <small>Desktop, tablet, mobile</small>
+          </div>
+          <div class="map-connector"><span>Same origin</span></div>
+          <div class="map-node map-api">
+            <span class="node-type">Application</span>
+            <strong>FastAPI</strong>
+            <small>Auth, roles, attendance</small>
+          </div>
+          <div class="map-split">
+            <div class="map-node">
+              <span class="node-type">Inference</span>
+              <strong>ONNX models</strong>
+              <small>Detection, match, liveness</small>
+            </div>
+            <div class="map-node">
+              <span class="node-type">State</span>
+              <strong>PostgreSQL</strong>
+              <small>pgvector and records</small>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="privacy section" id="privacy" aria-labelledby="privacy-title">
+        <div class="privacy-statement">
+          <h2 id="privacy-title">Images in. Embeddings out.</h2>
+          <p>Enrollment images are converted to face embeddings and are not retained.</p>
+        </div>
+
+        <div class="retention-diagram" aria-label="Face enrollment data flow">
+          <div class="retention-item source-item">
+            <span>Enrollment input</span>
+            <strong>JPEG or PNG</strong>
+            <small>Quality and liveness checked</small>
+          </div>
+          <div class="retention-path">
+            <span class="path-line"></span>
+            <strong>Transform</strong>
+          </div>
+          <div class="retention-item destination-item">
+            <span>Stored representation</span>
+            <strong>Face embedding</strong>
+            <small>Organization scoped</small>
+          </div>
+          <div class="discard-note">
+            <span>Source image</span>
+            <strong>Not retained</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="operations section" aria-labelledby="operations-title">
+        <div class="section-heading operations-heading">
+          <h2 id="operations-title">Built around the whole attendance loop.</h2>
+          <p>From initial enrollment to exports, the operational tools live beside the verification system.</p>
+        </div>
+
+        <div class="capability-ledger">
+          <article>
+            <span>People</span>
+            <h3>Organization-scoped access</h3>
+            <p>Users, roles, profiles, and elevated-account safeguards.</p>
+          </article>
+          <article>
+            <span>Enrollment</span>
+            <h3>Atomic bulk import</h3>
+            <p>Preview up to 100 people, resolve conflicts, then commit once.</p>
+          </article>
+          <article>
+            <span>Devices</span>
+            <h3>Revocable credentials</h3>
+            <p>Provision attendance devices without permanent shared secrets.</p>
+          </article>
+          <article>
+            <span>Records</span>
+            <h3>Check-in and check-out</h3>
+            <p>Review attendance across the organization and individual people.</p>
+          </article>
+          <article>
+            <span>Reporting</span>
+            <h3>Spreadsheet-ready exports</h3>
+            <p>Export attendance as CSV for downstream reporting workflows.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="closing section" aria-labelledby="closing-title">
+        <div>
+          <h2 id="closing-title">Inspect every layer.</h2>
+          <p>FaceLogix is MIT licensed. Review the architecture, deployment scripts, inference pipeline, and application code on GitHub.</p>
+        </div>
+        <a class="button button-dark" href="https://github.com/LunarithmAI/FaceLogix">Open the repository</a>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <a class="wordmark" href="#top">
+        <span class="wordmark-mark" aria-hidden="true"><span></span></span>
+        <span>FaceLogix</span>
+      </a>
+      <p>Self-hosted attendance verification.</p>
+      <a href="https://github.com/LunarithmAI/FaceLogix/blob/main/LICENSE">MIT License</a>
+    </footer>
+  </body>
+</html>
