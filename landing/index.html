@@ -27,29 +27,39 @@
       FORM: Calibration Record, seventh grounded direction, seed 76034772.
       FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
     -->
-    <a class="skip-link" href="#main-content">Skip to content</a>
+    <a class="skip-link" href="#main-content" data-i18n="skipLink">Skip to content</a>
 
-    <header class="site-header" aria-label="Primary navigation">
-      <a class="wordmark" href="#top" aria-label="FaceLogix home">
+    <header class="site-header" aria-label="Primary navigation" data-i18n-aria-label="primaryNavigation">
+      <a class="wordmark" href="#top" aria-label="FaceLogix home" data-i18n-aria-label="homeLabel">
         <span class="wordmark-mark" aria-hidden="true"><span></span></span>
         <span>FaceLogix</span>
       </a>
 
-      <nav class="desktop-nav" aria-label="Page sections">
-        <a href="#workflow">Workflow</a>
-        <a href="#architecture">Architecture</a>
-        <a href="#privacy">Privacy</a>
+      <nav class="desktop-nav" aria-label="Page sections" data-i18n-aria-label="pageSections">
+        <a href="#workflow" data-i18n="navWorkflow">Workflow</a>
+        <a href="#architecture" data-i18n="navArchitecture">Architecture</a>
+        <a href="#privacy" data-i18n="navPrivacy">Privacy</a>
       </nav>
 
-      <a class="header-action" href="https://github.com/LunarithmAI/FaceLogix">View on GitHub</a>
+      <div class="header-controls">
+        <div class="language-switch" role="group" aria-label="Language" data-i18n-aria-label="languageLabel">
+          <button type="button" data-language="en" aria-label="English" aria-pressed="true">EN</button>
+          <button type="button" data-language="vi" aria-label="Tiếng Việt" aria-pressed="false">VI</button>
+        </div>
+        <a class="header-action" href="https://github.com/LunarithmAI/FaceLogix" data-i18n="viewGithub">View on GitHub</a>
+      </div>
 
       <details class="mobile-menu">
-        <summary>Menu</summary>
-        <nav aria-label="Mobile page sections">
-          <a href="#workflow">Workflow</a>
-          <a href="#architecture">Architecture</a>
-          <a href="#privacy">Privacy</a>
-          <a href="https://github.com/LunarithmAI/FaceLogix">View on GitHub</a>
+        <summary data-i18n="menu">Menu</summary>
+        <nav aria-label="Mobile page sections" data-i18n-aria-label="mobilePageSections">
+          <a href="#workflow" data-i18n="navWorkflow">Workflow</a>
+          <a href="#architecture" data-i18n="navArchitecture">Architecture</a>
+          <a href="#privacy" data-i18n="navPrivacy">Privacy</a>
+          <a href="https://github.com/LunarithmAI/FaceLogix" data-i18n="viewGithub">View on GitHub</a>
+          <div class="language-switch" role="group" aria-label="Language" data-i18n-aria-label="languageLabel">
+            <button type="button" data-language="en" aria-label="English" aria-pressed="true">EN</button>
+            <button type="button" data-language="vi" aria-label="Tiếng Việt" aria-pressed="false">VI</button>
+          </div>
         </nav>
       </details>
     </header>
@@ -57,26 +67,30 @@
     <main id="main-content">
       <section class="hero" id="top" aria-labelledby="hero-title">
         <div class="hero-copy">
-          <h1 id="hero-title">Attendance, verified.</h1>
-          <p>
+          <h1 id="hero-title" data-i18n="heroTitle">Attendance, verified.</h1>
+          <p data-i18n="heroBody">
             FaceLogix gives operations teams self-hosted employee check-ins and check-outs with liveness checks and controlled biometric processing.
           </p>
           <div class="hero-actions">
-            <a class="button button-primary" href="https://github.com/LunarithmAI/FaceLogix">View on GitHub</a>
-            <a class="text-link" href="#workflow">Inspect the workflow</a>
+            <a class="button button-primary" href="https://github.com/LunarithmAI/FaceLogix" data-i18n="viewGithub">View on GitHub</a>
+            <a class="text-link" href="#workflow" data-i18n="inspectWorkflow">Inspect the workflow</a>
           </div>
         </div>
 
-        <div class="verification-stage" aria-label="Illustrative FaceLogix verification sequence">
+        <div
+          class="verification-stage"
+          aria-label="Illustrative FaceLogix verification sequence"
+          data-i18n-aria-label="verificationSequence"
+        >
           <div class="stage-header">
-            <span>Verification record</span>
+            <span data-i18n="verificationRecord">Verification record</span>
             <span class="record-id">FLX-2048</span>
           </div>
           <div class="scan-frame">
             <canvas id="face-trace" width="720" height="620" aria-hidden="true"></canvas>
             <div class="scan-grid" aria-hidden="true"></div>
             <div class="scan-line" aria-hidden="true"></div>
-            <p class="demo-label">Illustrative sequence</p>
+            <p class="demo-label" data-i18n="illustrativeSequence">Illustrative sequence</p>
           </div>
           <div class="verification-state" aria-live="polite">
             <span class="state-index">A</span>
@@ -87,39 +101,39 @@
             <button class="verify-button" id="verify-button" type="button">Run check</button>
           </div>
           <div class="measurement-row" aria-hidden="true">
-            <span>LIVENESS</span>
-            <span>QUALITY</span>
-            <span>MATCH</span>
+            <span data-i18n="liveness">LIVENESS</span>
+            <span data-i18n="quality">QUALITY</span>
+            <span data-i18n="match">MATCH</span>
           </div>
         </div>
       </section>
 
       <section class="workflow section" id="workflow" aria-labelledby="workflow-title">
         <div class="section-heading">
-          <h2 id="workflow-title">One arrival. Three accountable steps.</h2>
-          <p>Every check-in moves through the same explicit path, from capture to a reportable attendance event.</p>
+          <h2 id="workflow-title" data-i18n="workflowTitle">One arrival. Three accountable steps.</h2>
+          <p data-i18n="workflowBody">Every check-in moves through the same explicit path, from capture to a reportable attendance event.</p>
         </div>
 
         <ol class="workflow-track">
           <li>
-            <span class="step-marker">Capture</span>
+            <span class="step-marker" data-i18n="capture">Capture</span>
             <div>
-              <h3>Confirm a usable face</h3>
-              <p>Image-quality checks reject poor captures before recognition begins.</p>
+              <h3 data-i18n="captureTitle">Confirm a usable face</h3>
+              <p data-i18n="captureBody">Image-quality checks reject poor captures before recognition begins.</p>
             </div>
           </li>
           <li>
-            <span class="step-marker">Verify</span>
+            <span class="step-marker" data-i18n="verify">Verify</span>
             <div>
-              <h3>Test liveness and identity</h3>
-              <p>Internal ONNX models detect spoofing and compare the face embedding.</p>
+              <h3 data-i18n="verifyTitle">Test liveness and identity</h3>
+              <p data-i18n="verifyBody">Internal ONNX models detect spoofing and compare the face embedding.</p>
             </div>
           </li>
           <li>
-            <span class="step-marker">Record</span>
+            <span class="step-marker" data-i18n="record">Record</span>
             <div>
-              <h3>Write the attendance event</h3>
-              <p>A successful check becomes an organization-scoped check-in or check-out.</p>
+              <h3 data-i18n="recordTitle">Write the attendance event</h3>
+              <p data-i18n="recordBody">A successful check becomes an organization-scoped check-in or check-out.</p>
             </div>
           </li>
         </ol>
@@ -127,35 +141,39 @@
 
       <section class="architecture section" id="architecture" aria-labelledby="architecture-title">
         <div class="architecture-copy">
-          <h2 id="architecture-title">A deployment boundary you can explain.</h2>
-          <p>
+          <h2 id="architecture-title" data-i18n="architectureTitle">A deployment boundary you can explain.</h2>
+          <p data-i18n="architectureBody">
             The web app, API, face inference, and PostgreSQL database ship as one coherent Docker Compose deployment behind your own TLS edge.
           </p>
-          <a class="text-link light-link" href="https://github.com/LunarithmAI/FaceLogix#production-deployment">Read the deployment guide</a>
+          <a
+            class="text-link light-link"
+            href="https://github.com/LunarithmAI/FaceLogix#production-deployment"
+            data-i18n="deploymentGuide"
+          >Read the deployment guide</a>
         </div>
 
-        <div class="system-map" aria-label="FaceLogix system architecture">
+        <div class="system-map" aria-label="FaceLogix system architecture" data-i18n-aria-label="systemArchitecture">
           <div class="map-node map-device">
-            <span class="node-type">Device</span>
+            <span class="node-type" data-i18n="device">Device</span>
             <strong>React PWA</strong>
-            <small>Desktop, tablet, mobile</small>
+            <small data-i18n="devicePlatforms">Desktop, tablet, mobile</small>
           </div>
-          <div class="map-connector"><span>Same origin</span></div>
+          <div class="map-connector"><span data-i18n="sameOrigin">Same origin</span></div>
           <div class="map-node map-api">
-            <span class="node-type">Application</span>
+            <span class="node-type" data-i18n="application">Application</span>
             <strong>FastAPI</strong>
-            <small>Auth, roles, attendance</small>
+            <small data-i18n="applicationFunctions">Auth, roles, attendance</small>
           </div>
           <div class="map-split">
             <div class="map-node">
-              <span class="node-type">Inference</span>
+              <span class="node-type" data-i18n="inference">Inference</span>
               <strong>ONNX models</strong>
-              <small>Detection, match, liveness</small>
+              <small data-i18n="inferenceFunctions">Detection, match, liveness</small>
             </div>
             <div class="map-node">
-              <span class="node-type">State</span>
+              <span class="node-type" data-i18n="state">State</span>
               <strong>PostgreSQL</strong>
-              <small>pgvector and records</small>
+              <small data-i18n="stateFunctions">pgvector and records</small>
             </div>
           </div>
         </div>
@@ -163,73 +181,73 @@
 
       <section class="privacy section" id="privacy" aria-labelledby="privacy-title">
         <div class="privacy-statement">
-          <h2 id="privacy-title">Images in. Embeddings out.</h2>
-          <p>Enrollment images are converted to face embeddings and are not retained.</p>
+          <h2 id="privacy-title" data-i18n="privacyTitle">Images in. Embeddings out.</h2>
+          <p data-i18n="privacyBody">Enrollment images are converted to face embeddings and are not retained.</p>
         </div>
 
-        <div class="retention-diagram" aria-label="Face enrollment data flow">
+        <div class="retention-diagram" aria-label="Face enrollment data flow" data-i18n-aria-label="enrollmentDataFlow">
           <div class="retention-item source-item">
-            <span>Enrollment input</span>
+            <span data-i18n="enrollmentInput">Enrollment input</span>
             <strong>JPEG or PNG</strong>
-            <small>Quality and liveness checked</small>
+            <small data-i18n="inputChecks">Quality and liveness checked</small>
           </div>
           <div class="retention-path">
             <span class="path-line"></span>
-            <strong>Transform</strong>
+            <strong data-i18n="transform">Transform</strong>
           </div>
           <div class="retention-item destination-item">
-            <span>Stored representation</span>
-            <strong>Face embedding</strong>
-            <small>Organization scoped</small>
+            <span data-i18n="storedRepresentation">Stored representation</span>
+            <strong data-i18n="faceEmbedding">Face embedding</strong>
+            <small data-i18n="organizationScoped">Organization scoped</small>
           </div>
           <div class="discard-note">
-            <span>Source image</span>
-            <strong>Not retained</strong>
+            <span data-i18n="sourceImage">Source image</span>
+            <strong data-i18n="notRetained">Not retained</strong>
           </div>
         </div>
       </section>
 
       <section class="operations section" aria-labelledby="operations-title">
         <div class="section-heading operations-heading">
-          <h2 id="operations-title">Built around the whole attendance loop.</h2>
-          <p>From initial enrollment to exports, the operational tools live beside the verification system.</p>
+          <h2 id="operations-title" data-i18n="operationsTitle">Built around the whole attendance loop.</h2>
+          <p data-i18n="operationsBody">From initial enrollment to exports, the operational tools live beside the verification system.</p>
         </div>
 
         <div class="capability-ledger">
           <article>
-            <span>People</span>
-            <h3>Organization-scoped access</h3>
-            <p>Users, roles, profiles, and elevated-account safeguards.</p>
+            <span data-i18n="people">People</span>
+            <h3 data-i18n="peopleTitle">Organization-scoped access</h3>
+            <p data-i18n="peopleBody">Users, roles, profiles, and elevated-account safeguards.</p>
           </article>
           <article>
-            <span>Enrollment</span>
-            <h3>Atomic bulk import</h3>
-            <p>Preview up to 100 people, resolve conflicts, then commit once.</p>
+            <span data-i18n="enrollment">Enrollment</span>
+            <h3 data-i18n="enrollmentTitle">Atomic bulk import</h3>
+            <p data-i18n="enrollmentBody">Preview up to 100 people, resolve conflicts, then commit once.</p>
           </article>
           <article>
-            <span>Devices</span>
-            <h3>Revocable credentials</h3>
-            <p>Provision attendance devices without permanent shared secrets.</p>
+            <span data-i18n="devices">Devices</span>
+            <h3 data-i18n="devicesTitle">Revocable credentials</h3>
+            <p data-i18n="devicesBody">Provision attendance devices without permanent shared secrets.</p>
           </article>
           <article>
-            <span>Records</span>
-            <h3>Check-in and check-out</h3>
-            <p>Review attendance across the organization and individual people.</p>
+            <span data-i18n="records">Records</span>
+            <h3 data-i18n="recordsTitle">Check-in and check-out</h3>
+            <p data-i18n="recordsBody">Review attendance across the organization and individual people.</p>
           </article>
           <article>
-            <span>Reporting</span>
-            <h3>Spreadsheet-ready exports</h3>
-            <p>Export attendance as CSV for downstream reporting workflows.</p>
+            <span data-i18n="reporting">Reporting</span>
+            <h3 data-i18n="reportingTitle">Spreadsheet-ready exports</h3>
+            <p data-i18n="reportingBody">Export attendance as CSV for downstream reporting workflows.</p>
           </article>
         </div>
       </section>
 
       <section class="closing section" aria-labelledby="closing-title">
         <div>
-          <h2 id="closing-title">Inspect every layer.</h2>
-          <p>FaceLogix is MIT licensed. Review the architecture, deployment scripts, inference pipeline, and application code on GitHub.</p>
+          <h2 id="closing-title" data-i18n="closingTitle">Inspect every layer.</h2>
+          <p data-i18n="closingBody">FaceLogix is MIT licensed. Review the architecture, deployment scripts, inference pipeline, and application code on GitHub.</p>
         </div>
-        <a class="button button-dark" href="https://github.com/LunarithmAI/FaceLogix">Open the repository</a>
+        <a class="button button-dark" href="https://github.com/LunarithmAI/FaceLogix" data-i18n="openRepository">Open the repository</a>
       </section>
     </main>
 
@@ -238,8 +256,8 @@
         <span class="wordmark-mark" aria-hidden="true"><span></span></span>
         <span>FaceLogix</span>
       </a>
-      <p>Self-hosted attendance verification.</p>
-      <a href="https://github.com/LunarithmAI/FaceLogix/blob/main/LICENSE">MIT License</a>
+      <p data-i18n="footerTagline">Self-hosted attendance verification.</p>
+      <a href="https://github.com/LunarithmAI/FaceLogix/blob/main/LICENSE" data-i18n="license">MIT License</a>
     </footer>
   </body>
 </html>

@@ -193,9 +193,14 @@ Components share square corners, one-pixel borders, strong weight contrast, and 
 - **Internal Padding:** Record rows use 0.8rem–1rem, map nodes use 1.15rem, and retention items use 1.25rem.
 
 ### Navigation
-- **Desktop:** A sticky 4.5rem rail with wordmark left, centered uppercase section links, and a dark repository action right. Link rules reveal from left to right over 180ms ease-out.
-- **Mobile:** At 52rem and below, the rail becomes 4rem high and exposes a bordered `details` summary. The open menu spans the rail width, uses one-rem row padding, and closes after a link is selected.
-- **Focus:** Wordmark, links, action, and menu summary all receive the shared visible focus ring.
+- **Desktop:** A sticky 4.5rem rail with wordmark left, centered uppercase section links, and a right control group containing the language switch and dark repository action. Link rules reveal from left to right over 180ms ease-out.
+- **Mobile:** At 52rem and below, the rail becomes 4rem high and exposes a bordered `details` summary. The open menu spans the rail width, uses one-rem link rows, includes the language switch after the repository link, and closes after a link or language is selected.
+- **Focus:** Wordmark, links, action, menu summary, and both language buttons receive the shared visible focus ring.
+
+### Language Switch
+- **Structure:** Two square 2.25rem cells inside one graphite key line. Labels use the data face at 0.68rem and a 2.35rem minimum height.
+- **State:** The selected language uses registration cobalt with white text and `aria-pressed="true"`; the unselected language stays transparent and moves to deep calibration paper on hover.
+- **Behavior:** Desktop and mobile controls remain synchronized. A selection updates page copy, document language, metadata, verification state, the shareable URL, and local preference without reloading.
 
 ### Verification Control
 - **Style:** A transparent, square button with a one-pixel graphite border, a 2.6rem minimum height, 0.6rem by 0.85rem padding, and a 6.4rem minimum width.
