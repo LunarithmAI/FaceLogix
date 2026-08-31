@@ -2,6 +2,8 @@
 
 FaceLogix is a multi-tenant face-recognition attendance system. It combines a FastAPI API, a React 19 progressive web app, PostgreSQL with pgvector, and an internal ONNX inference service with liveness detection.
 
+[View the live project site](https://lunarithmai.github.io/FaceLogix/)
+
 ## Capabilities
 
 - Face enrollment and check-in/check-out with liveness and image-quality checks
@@ -210,6 +212,7 @@ Health endpoints:
 backend/              FastAPI API, migrations, and tests
 face_service/         ONNX pipeline, manifest, downloader, and tests
 frontend/             React PWA
+landing/              Static GitHub Pages project site
 docker/               Compose topology and production edge image
 scripts/              setup, deployment, backup, restore, and secret tooling
 ```
