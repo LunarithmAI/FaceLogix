@@ -1,3 +1,6 @@
+import type { DeviceSettings } from '@/types/device';
+import type { ShiftSummary } from '@/types/shift';
+import type { UnitSummary } from '@/types/unit';
 import type { UserRole } from '@/types/roles';
 
 export interface User {
@@ -23,23 +26,34 @@ export interface AuthTokens {
   token_type: string;
 }
 
-export interface AuthState {
-  user: User | null;
-  tokens: AuthTokens | null;
-  isAuthenticated: boolean;
-  isLoading: boolean;
-}
-
-// Backend returns flat response with user info and tokens together
-export interface LoginResponse {
-  access_token: string;
-  refresh_token: string;
-  token_type: string;
+export interface LoginResponse extends AuthTokens {
   user_id: string;
   org_id: string;
   role: UserRole;
   name: string;
 }
+
+export interface HumanSession {
+  kind: 'user';
+  user: User;
+  tokens: AuthTokens;
+}
+
+export interface DevicePrincipal {
+  id: string;
+  org_id: string;
+  name: string;
+  settings: DeviceSettings;
+}
+
+export interface DeviceSession {
+  kind: 'device';
+  device: DevicePrincipal;
+  access_token: string;
+  token_type: string;
+}
+
+export type AuthSession = HumanSession | DeviceSession;
 
 export interface UserProfile {
   id: string;
@@ -47,7 +61,9 @@ export interface UserProfile {
   email: string | null;
   name: string;
   role: UserRole;
-  department: string | null;
+  current_unit: UnitSummary | null;
+  current_shift: ShiftSummary | null;
+  managed_units: UnitSummary[];
   is_active: boolean;
   enrolled_at: string | null;
   created_at: string;

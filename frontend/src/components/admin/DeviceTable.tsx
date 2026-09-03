@@ -1,9 +1,10 @@
 import {
-  PencilIcon,
-  TrashIcon,
   EllipsisVerticalIcon,
+  KeyIcon,
+  PencilIcon,
   SignalIcon,
   SignalSlashIcon,
+  TrashIcon,
 } from '@heroicons/react/24/outline';
 import type { Device } from '@/types/device';
 import { Badge, StatusBadge } from '@/components/ui/Badge';
@@ -27,6 +28,7 @@ interface DeviceTableProps {
   onEdit?: (device: Device) => void;
   onDelete?: (device: Device) => void;
   onToggleStatus?: (device: Device) => void;
+  onRegenerateSecret?: (device: Device) => void;
 }
 
 export function DeviceTable({
@@ -35,6 +37,7 @@ export function DeviceTable({
   onEdit,
   onDelete,
   onToggleStatus,
+  onRegenerateSecret,
 }: DeviceTableProps) {
 
 
@@ -144,6 +147,18 @@ export function DeviceTable({
                       >
                         <PencilIcon className="mr-3 h-4 w-4" aria-hidden="true" />
                         {t('Edit')}
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          close();
+                          onRegenerateSecret?.(device);
+                        }}
+                        className={disclosureMenuItemClass}
+                      >
+                        <KeyIcon className="mr-3 h-4 w-4" aria-hidden="true" />
+                        {t('Regenerate secret')}
                       </button>
                       <button
                         type="button"

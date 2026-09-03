@@ -5,7 +5,8 @@ Provides CRUD operations for users and face enrollment functionality.
 """
 
 from dataclasses import dataclass
-from typing import Annotated
+from datetime import date
+from typing import Annotated, Literal
 from uuid import UUID
 
 import anyio
@@ -26,8 +27,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
+    clear_manager_scopes,
     ensure_role_assignment_allowed,
     ensure_target_user_mutable,
+    ensure_user_in_scope,
+    managed_unit_ids,
+    require_admin,
     require_operator,
 )
 from app.api.tenant import load_org, load_user
@@ -35,15 +40,31 @@ from app.core.database import get_db
 from app.core.identity import UserRole
 from app.core.images import ImagePayloadError, decode_image_payload
 from app.core.security import hash_password
-from app.core.time import utc_now
+from app.core.time import local_day_bounds, utc_now
 from app.models.face_embedding import FaceEmbedding
+from app.models.organizational_unit import ManagerUnitScope, OrganizationalUnit
+from app.models.shift import Shift
+from app.models.shift_assignment import UserShiftAssignment
+from app.models.unit_assignment import UserUnitAssignment
 from app.models.user import User
 from app.schemas.common import PaginatedResponse
 from app.schemas.settings import canonical_org_settings
+from app.schemas.shift import (
+    ShiftAssignmentResponse,
+    ShiftAssignmentUpdate,
+    ShiftSummary,
+)
+from app.schemas.unit import (
+    ManagedUnitsUpdate,
+    UnitAssignmentResponse,
+    UnitAssignmentUpdate,
+    UnitSummary,
+)
 from app.schemas.user import (
     FaceEnrollmentRequest,
     FaceStatusResponse,
     ResetPasswordRequest,
+    UserActivationRequest,
     UserCreate,
     UserEnrollResponse,
     UserImportCommitOptions,
@@ -54,12 +75,18 @@ from app.schemas.user import (
     UserResponse,
     UserUpdate,
 )
+from app.services.assignments import (
+    close_assignments_for_deactivation,
+    replace_shift_assignment,
+    replace_unit_assignment,
+)
 from app.services.face_client import (
     FaceAnalysis,
     FaceServiceClient,
     FaceServiceError,
     get_face_client,
 )
+from app.services.face_identity import replace_face_identity
 from app.services.user_import import (
     ParsedImportRow,
     ParsedUserImport,
@@ -81,10 +108,130 @@ async def commit_or_conflict(db: AsyncSession) -> None:
         ) from exc
 
 
+async def user_responses(
+    db: AsyncSession,
+    users: list[User],
+    on_date: date,
+) -> list[UserResponse]:
+    if not users:
+        return []
+    user_ids = [user.id for user in users]
+    unit_rows = (
+        await db.execute(
+            select(UserUnitAssignment.user_id, OrganizationalUnit)
+            .join(OrganizationalUnit, OrganizationalUnit.id == UserUnitAssignment.unit_id)
+            .where(
+                UserUnitAssignment.user_id.in_(user_ids),
+                UserUnitAssignment.effective_from <= on_date,
+                (
+                    UserUnitAssignment.effective_to.is_(None)
+                    | (UserUnitAssignment.effective_to >= on_date)
+                ),
+            )
+        )
+    ).all()
+    shift_rows = (
+        await db.execute(
+            select(UserShiftAssignment.user_id, Shift)
+            .join(Shift, Shift.id == UserShiftAssignment.shift_id)
+            .where(
+                UserShiftAssignment.user_id.in_(user_ids),
+                UserShiftAssignment.effective_from <= on_date,
+                (
+                    UserShiftAssignment.effective_to.is_(None)
+                    | (UserShiftAssignment.effective_to >= on_date)
+                ),
+            )
+        )
+    ).all()
+    managed_rows = (
+        await db.execute(
+            select(ManagerUnitScope.manager_id, OrganizationalUnit)
+            .join(OrganizationalUnit, OrganizationalUnit.id == ManagerUnitScope.unit_id)
+            .where(ManagerUnitScope.manager_id.in_(user_ids))
+            .order_by(OrganizationalUnit.name)
+        )
+    ).all()
+    units = {user_id: UnitSummary.model_validate(unit) for user_id, unit in unit_rows}
+    shifts = {user_id: ShiftSummary.model_validate(shift) for user_id, shift in shift_rows}
+    managed: dict[UUID, list[UnitSummary]] = {}
+    for manager_id, unit in managed_rows:
+        managed.setdefault(manager_id, []).append(UnitSummary.model_validate(unit))
+    return [
+        UserResponse(
+            id=user.id,
+            org_id=user.org_id,
+            email=user.email,
+            name=user.name,
+            external_id=user.external_id,
+            role=UserRole(user.role),
+            current_unit=units.get(user.id),
+            current_shift=shifts.get(user.id),
+            managed_units=managed.get(user.id, []),
+            is_active=user.is_active,
+            enrolled_at=user.enrolled_at,
+            created_at=user.created_at,
+            updated_at=user.updated_at,
+        )
+        for user in users
+    ]
+
+
+async def user_response(db: AsyncSession, user: User, on_date: date) -> UserResponse:
+    return (await user_responses(db, [user], on_date))[0]
+
+
+async def active_unit(db: AsyncSession, org_id: UUID, unit_id: UUID) -> OrganizationalUnit:
+    unit = await db.scalar(
+        select(OrganizationalUnit).where(
+            OrganizationalUnit.id == unit_id,
+            OrganizationalUnit.org_id == org_id,
+            OrganizationalUnit.is_active.is_(True),
+        )
+    )
+    if unit is None:
+        raise HTTPException(status_code=404, detail="Unit not found")
+    return unit
+
+
+async def active_shift(db: AsyncSession, org_id: UUID, shift_id: UUID) -> Shift:
+    shift = await db.scalar(
+        select(Shift).where(
+            Shift.id == shift_id,
+            Shift.org_id == org_id,
+            Shift.is_active.is_(True),
+        )
+    )
+    if shift is None:
+        raise HTTPException(status_code=404, detail="Shift not found")
+    return shift
+
+
+async def sync_legacy_department(
+    db: AsyncSession,
+    user: User,
+    today: date,
+) -> None:
+    name = await db.scalar(
+        select(OrganizationalUnit.name)
+        .join(UserUnitAssignment, UserUnitAssignment.unit_id == OrganizationalUnit.id)
+        .where(
+            UserUnitAssignment.user_id == user.id,
+            UserUnitAssignment.effective_from <= today,
+            (
+                UserUnitAssignment.effective_to.is_(None)
+                | (UserUnitAssignment.effective_to >= today)
+            ),
+        )
+    )
+    user._legacy_department = name
+
+
 @dataclass(slots=True)
 class UserImportPreviewState:
     response: UserImportPreviewResponse
     conflict_users: dict[int, User]
+    unit_ids: dict[int, UUID | None]
 
 
 async def parse_import_upload(package: UploadFile) -> ParsedUserImport:
@@ -100,12 +247,60 @@ async def parse_import_upload(package: UploadFile) -> ParsedUserImport:
 async def build_import_preview(
     parsed: ParsedUserImport,
     db: AsyncSession,
-    org_id: UUID,
+    actor: User,
 ) -> UserImportPreviewState:
     errors = [
         UserImportError(row=error.row, code=error.code, message=error.message, field=error.field)
         for error in parsed.errors
     ]
+    units = list(
+        (
+            await db.scalars(
+                select(OrganizationalUnit).where(
+                    OrganizationalUnit.org_id == actor.org_id,
+                    OrganizationalUnit.is_active.is_(True),
+                )
+            )
+        ).all()
+    )
+    units_by_name = {unit.name.strip().casefold(): unit for unit in units}
+    actor_scope_ids = await managed_unit_ids(db, actor)
+    unit_ids: dict[int, UUID | None] = {}
+    for row in parsed.rows:
+        if row.unit is None:
+            unit_ids[row.row] = None
+            if actor.role == UserRole.MANAGER.value:
+                errors.append(
+                    UserImportError(
+                        row=row.row,
+                        code="UNIT_FORBIDDEN",
+                        message="Managers must assign an existing managed unit",
+                        field="unit",
+                    )
+                )
+            continue
+        unit = units_by_name.get(row.unit.strip().casefold())
+        if unit is None:
+            errors.append(
+                UserImportError(
+                    row=row.row,
+                    code="UNKNOWN_UNIT",
+                    message=f"Unknown active unit: {row.unit}",
+                    field="unit",
+                )
+            )
+            continue
+        if actor.role == UserRole.MANAGER.value and unit.id not in actor_scope_ids:
+            errors.append(
+                UserImportError(
+                    row=row.row,
+                    code="UNIT_FORBIDDEN",
+                    message="Unit is outside manager scope",
+                    field="unit",
+                )
+            )
+            continue
+        unit_ids[row.row] = unit.id
     errored_rows = {error.row for error in errors if error.row is not None}
     candidate_rows = [row for row in parsed.rows if row.row not in errored_rows]
     external_ids = [row.external_id for row in candidate_rows]
@@ -116,9 +311,28 @@ async def build_import_preview(
         if emails:
             identity_filters.append(User.email.in_(emails))
         result = await db.execute(
-            select(User).where(User.org_id == org_id, or_(*identity_filters))
+            select(User).where(User.org_id == actor.org_id, or_(*identity_filters))
         )
         existing_users = list(result.scalars().all())
+    scoped_existing_ids: set[UUID] | None = None
+    if actor.role == UserRole.MANAGER.value:
+        org = await load_org(db, actor.org_id)
+        today = local_day_bounds(org.timezone)[0]
+        scoped_existing_ids = set(
+            (
+                await db.scalars(
+                    select(UserUnitAssignment.user_id).where(
+                        UserUnitAssignment.user_id.in_([user.id for user in existing_users]),
+                        UserUnitAssignment.unit_id.in_(actor_scope_ids),
+                        UserUnitAssignment.effective_from <= today,
+                        (
+                            UserUnitAssignment.effective_to.is_(None)
+                            | (UserUnitAssignment.effective_to >= today)
+                        ),
+                    )
+                )
+            ).all()
+        )
 
     users_by_external_id = {
         user.external_id: user for user in existing_users if user.external_id is not None
@@ -147,6 +361,17 @@ async def build_import_preview(
         existing_user = external_user or email_user
         if existing_user is None:
             continue
+        if scoped_existing_ids is not None and existing_user.id not in scoped_existing_ids:
+            errors.append(
+                UserImportError(
+                    row=row.row,
+                    code="UNIT_FORBIDDEN",
+                    message="Existing person is outside manager scope",
+                    field="unit",
+                )
+            )
+            errored_rows.add(row.row)
+            continue
         previous_row = matched_target_rows.get(existing_user.id)
         if previous_row is not None:
             errors.append(
@@ -159,7 +384,7 @@ async def build_import_preview(
             errored_rows.add(row.row)
             continue
         matched_target_rows[existing_user.id] = row.row
-        allowed_actions: list[str] = ["skip"]
+        allowed_actions: list[Literal["skip", "replace"]] = ["skip"]
         if existing_user.role == UserRole.MEMBER.value:
             allowed_actions.append("replace")
         conflicts.append(
@@ -188,7 +413,11 @@ async def build_import_preview(
         conflicts=conflicts,
         errors=errors,
     )
-    return UserImportPreviewState(response=response, conflict_users=conflict_users)
+    return UserImportPreviewState(
+        response=response,
+        conflict_users=conflict_users,
+        unit_ids=unit_ids,
+    )
 
 
 def resolve_import_rows(
@@ -282,52 +511,69 @@ async def list_users(
     page_size: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 50,
     search: Annotated[str | None, Query(description="Search by name or email")] = None,
     is_active: Annotated[bool | None, Query(description="Filter by active status")] = None,
-    department: Annotated[str | None, Query(description="Filter by department")] = None,
+    unit_id: Annotated[UUID | None, Query(description="Filter by unit")] = None,
+    shift_id: Annotated[UUID | None, Query(description="Filter by shift")] = None,
 ) -> PaginatedResponse[UserResponse]:
-    """
-    List all users in the organization with pagination and filtering.
+    org = await load_org(db, current_user.org_id)
+    today = local_day_bounds(org.timezone)[0]
+    unit_assignment = select(UserUnitAssignment.user_id).where(
+        UserUnitAssignment.org_id == current_user.org_id,
+        UserUnitAssignment.effective_from <= today,
+        (
+            UserUnitAssignment.effective_to.is_(None)
+            | (UserUnitAssignment.effective_to >= today)
+        ),
+    )
+    if current_user.role == UserRole.MANAGER.value:
+        scope_ids = await managed_unit_ids(db, current_user)
+        if unit_id is not None:
+            scope_ids &= {unit_id}
+        unit_assignment = unit_assignment.where(UserUnitAssignment.unit_id.in_(scope_ids))
+    elif unit_id is not None:
+        unit_assignment = unit_assignment.where(UserUnitAssignment.unit_id == unit_id)
 
-    Admin only.
-    """
-    # Base query
-    query = select(User).where(User.org_id == current_user.org_id)
-    count_query = select(func.count(User.id)).where(User.org_id == current_user.org_id)
-
-    # Apply filters
-    if is_active is not None:
-        query = query.where(User.is_active == is_active)
-        count_query = count_query.where(User.is_active == is_active)
-
-    if department:
-        query = query.where(User.department == department)
-        count_query = count_query.where(User.department == department)
-
-    if search:
-        search_filter = or_(
-            User.name.ilike(f"%{search}%"),
-            User.email.ilike(f"%{search}%"),
-            User.external_id.ilike(f"%{search}%"),
+    conditions = [User.org_id == current_user.org_id]
+    if current_user.role == UserRole.MANAGER.value or unit_id is not None:
+        conditions.append(User.id.in_(unit_assignment))
+    if shift_id is not None:
+        shift_users = select(UserShiftAssignment.user_id).where(
+            UserShiftAssignment.org_id == current_user.org_id,
+            UserShiftAssignment.shift_id == shift_id,
+            UserShiftAssignment.effective_from <= today,
+            (
+                UserShiftAssignment.effective_to.is_(None)
+                | (UserShiftAssignment.effective_to >= today)
+            ),
         )
-        query = query.where(search_filter)
-        count_query = count_query.where(search_filter)
-
-    # Get total count
-    total = await db.scalar(count_query) or 0
-
-    pages = (total + page_size - 1) // page_size if total else 1
-    offset = (page - 1) * page_size
-
-    # Execute query with pagination
-    query = query.order_by(User.name).offset(offset).limit(page_size)
-    result = await db.execute(query)
-    users = result.scalars().all()
-
+        conditions.append(User.id.in_(shift_users))
+    if is_active is not None:
+        conditions.append(User.is_active == is_active)
+    if search:
+        conditions.append(
+            or_(
+                User.name.ilike(f"%{search}%"),
+                User.email.ilike(f"%{search}%"),
+                User.external_id.ilike(f"%{search}%"),
+            )
+        )
+    total = await db.scalar(select(func.count(User.id)).where(*conditions)) or 0
+    users = list(
+        (
+            await db.scalars(
+                select(User)
+                .where(*conditions)
+                .order_by(User.name)
+                .offset((page - 1) * page_size)
+                .limit(page_size)
+            )
+        ).all()
+    )
     return PaginatedResponse(
-        items=[UserResponse.model_validate(user) for user in users],
+        items=await user_responses(db, users, today),
         total=total,
         page=page,
         page_size=page_size,
-        pages=pages,
+        pages=(total + page_size - 1) // page_size if total else 1,
     )
 
 
@@ -337,61 +583,75 @@ async def create_user(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(require_operator)],
 ) -> UserResponse:
-    """
-    Create a new user in the organization.
-
-    Admin only.
-    """
     ensure_role_assignment_allowed(current_user, user_data.role.value)
-    # Check if email already exists in org
+    if current_user.role == UserRole.MANAGER.value and user_data.unit_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "UNIT_FORBIDDEN", "message": "Managers must assign a managed unit"},
+        )
+    unit = (
+        await active_unit(db, current_user.org_id, user_data.unit_id)
+        if user_data.unit_id is not None
+        else None
+    )
+    if (
+        unit is not None
+        and current_user.role == UserRole.MANAGER.value
+        and unit.id not in await managed_unit_ids(db, current_user)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "UNIT_FORBIDDEN", "message": "Unit is outside manager scope"},
+        )
+    shift = (
+        await active_shift(db, current_user.org_id, user_data.shift_id)
+        if user_data.shift_id is not None
+        else None
+    )
     if user_data.email:
-        existing = await db.execute(
+        existing = await db.scalar(
             select(User).where(
                 User.org_id == current_user.org_id,
                 User.email == user_data.email,
             )
         )
-        if existing.scalar_one_or_none():
+        if existing is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={"code": "USER_CONFLICT", "message": "Email already exists"},
             )
-
-    # Check if external_id already exists in org
     if user_data.external_id:
-        existing = await db.execute(
+        existing = await db.scalar(
             select(User).where(
                 User.org_id == current_user.org_id,
                 User.external_id == user_data.external_id,
             )
         )
-        if existing.scalar_one_or_none():
+        if existing is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={"code": "USER_CONFLICT", "message": "External ID already exists"},
             )
-
-    # Hash password if provided
-    password_hash = None
-    if user_data.password:
-        password_hash = hash_password(user_data.password)
-
-    # Create user
+    org = await load_org(db, current_user.org_id)
+    today = local_day_bounds(org.timezone)[0]
     user = User(
         org_id=current_user.org_id,
         name=user_data.name,
         email=user_data.email,
         external_id=user_data.external_id,
-        department=user_data.department,
+        _legacy_department=unit.name if unit is not None else None,
         role=user_data.role.value,
-        password_hash=password_hash,
+        password_hash=hash_password(user_data.password) if user_data.password else None,
     )
-
     db.add(user)
+    await db.flush()
+    if unit is not None:
+        await replace_unit_assignment(db, user, unit.id, today)
+    if shift is not None:
+        await replace_shift_assignment(db, user, shift.id, today)
     await commit_or_conflict(db)
     await db.refresh(user)
-
-    return UserResponse.model_validate(user)
+    return await user_response(db, user, today)
 
 
 @router.post("/import/preview", response_model=UserImportPreviewResponse)
@@ -403,7 +663,7 @@ async def preview_user_import(
     current_user: Annotated[User, Depends(require_operator)],
 ) -> UserImportPreviewResponse:
     parsed = await parse_import_upload(package)
-    preview = await build_import_preview(parsed, db, current_user.org_id)
+    preview = await build_import_preview(parsed, db, current_user)
     return preview.response
 
 
@@ -419,7 +679,7 @@ async def import_users(
 ) -> UserImportResult:
     parsed = await parse_import_upload(package)
     options = parse_commit_options(options_json)
-    initial_preview = await build_import_preview(parsed, db, current_user.org_id)
+    initial_preview = await build_import_preview(parsed, db, current_user)
     active_rows, initial_replacements, skipped_count = resolve_import_rows(
         parsed, initial_preview, options
     )
@@ -451,7 +711,7 @@ async def import_users(
                 ) from exc
         analyses_by_row[row.row] = analyses
 
-    final_preview = await build_import_preview(parsed, db, current_user.org_id)
+    final_preview = await build_import_preview(parsed, db, current_user)
     final_rows, final_replacements, final_skipped_count = resolve_import_rows(
         parsed, final_preview, options
     )
@@ -471,6 +731,20 @@ async def import_users(
 
     org = await load_org(db, current_user.org_id)
     policy = canonical_org_settings(org.settings)
+    today = local_day_bounds(org.timezone)[0]
+    resolved_unit_ids = {
+        unit_id for unit_id in final_preview.unit_ids.values() if unit_id is not None
+    }
+    import_units = {
+        unit.id: unit
+        for unit in (
+            await db.scalars(
+                select(OrganizationalUnit).where(
+                    OrganizationalUnit.id.in_(resolved_unit_ids)
+                )
+            )
+        ).all()
+    }
     if policy.require_liveness:
         for row in final_rows:
             for image_path, analysis in zip(row.image_paths, analyses_by_row[row.row], strict=True):
@@ -508,6 +782,7 @@ async def import_users(
             db.add(user)
         else:
             ensure_target_user_mutable(current_user, replacement_user)
+            await ensure_user_in_scope(db, current_user, replacement_user)
             if replacement_user.role != UserRole.MEMBER.value:
                 await db.rollback()
                 raise HTTPException(
@@ -521,30 +796,34 @@ async def import_users(
         user.external_id = row.external_id
         user.name = row.name
         user.email = row.email
-        user.department = row.department
+        unit_id = final_preview.unit_ids[row.row]
+        user._legacy_department = (
+            import_units[unit_id].name if unit_id is not None else None
+        )
         user.enrolled_at = enrolled_at
         users_by_row[row.row] = user
 
     try:
         await db.flush()
-        replacement_user_ids = list(final_replacements.values())
-        if replacement_user_ids:
-            await db.execute(
-                delete(FaceEmbedding).where(FaceEmbedding.user_id.in_(replacement_user_ids))
+        for row in final_rows:
+            await replace_unit_assignment(
+                db,
+                users_by_row[row.row],
+                final_preview.unit_ids[row.row],
+                today,
             )
+        await db.flush()
         embeddings_count = 0
         for row in final_rows:
-            user = users_by_row[row.row]
-            for index, analysis in enumerate(analyses_by_row[row.row]):
-                db.add(
-                    FaceEmbedding(
-                        user_id=user.id,
-                        embedding=analysis.embedding,
-                        quality_score=analysis.quality_score,
-                        is_primary=index == 0,
-                    )
-                )
-                embeddings_count += 1
+            analyses = analyses_by_row[row.row]
+            await replace_face_identity(
+                db,
+                org_id=org.id,
+                user_id=users_by_row[row.row].id,
+                analyses=analyses,
+                collision_threshold=policy.face_match_threshold,
+            )
+            embeddings_count += len(analyses)
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
@@ -565,6 +844,173 @@ async def import_users(
     )
 
 
+@router.put("/{manager_id}/managed-units", response_model=UserResponse)
+async def replace_managed_units(
+    manager_id: UUID,
+    payload: ManagedUnitsUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_admin)],
+) -> UserResponse:
+    manager = await load_user(db, current_user.org_id, manager_id)
+    if manager.role != UserRole.MANAGER.value:
+        raise HTTPException(status_code=422, detail="Target user must be a manager")
+    units = list(
+        (
+            await db.scalars(
+                select(OrganizationalUnit).where(
+                    OrganizationalUnit.org_id == current_user.org_id,
+                    OrganizationalUnit.id.in_(payload.unit_ids),
+                )
+            )
+        ).all()
+    )
+    if len(units) != len(payload.unit_ids):
+        raise HTTPException(status_code=404, detail="Unit not found")
+    await db.execute(
+        delete(ManagerUnitScope).where(ManagerUnitScope.manager_id == manager.id)
+    )
+    db.add_all(
+        [ManagerUnitScope(manager_id=manager.id, unit_id=unit_id) for unit_id in payload.unit_ids]
+    )
+    await db.commit()
+    org = await load_org(db, current_user.org_id)
+    return await user_response(db, manager, local_day_bounds(org.timezone)[0])
+
+
+@router.get(
+    "/{user_id}/unit-assignments",
+    response_model=list[UnitAssignmentResponse],
+)
+async def list_unit_assignments(
+    user_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_operator)],
+) -> list[UnitAssignmentResponse]:
+    user = await load_user(db, current_user.org_id, user_id)
+    await ensure_user_in_scope(db, current_user, user)
+    rows = (
+        await db.execute(
+            select(UserUnitAssignment, OrganizationalUnit)
+            .join(OrganizationalUnit, OrganizationalUnit.id == UserUnitAssignment.unit_id)
+            .where(UserUnitAssignment.user_id == user.id)
+            .order_by(UserUnitAssignment.effective_from)
+        )
+    ).all()
+    return [
+        UnitAssignmentResponse(
+            id=assignment.id,
+            user_id=user.id,
+            unit=UnitSummary.model_validate(unit),
+            effective_from=assignment.effective_from,
+            effective_to=assignment.effective_to,
+            created_at=assignment.created_at,
+            updated_at=assignment.updated_at,
+        )
+        for assignment, unit in rows
+    ]
+
+
+@router.put("/{user_id}/unit-assignment", response_model=UserResponse)
+async def put_unit_assignment(
+    user_id: UUID,
+    payload: UnitAssignmentUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_operator)],
+) -> UserResponse:
+    user = await load_user(db, current_user.org_id, user_id)
+    ensure_target_user_mutable(current_user, user)
+    org = await load_org(db, current_user.org_id)
+    today = local_day_bounds(org.timezone)[0]
+    if current_user.role == UserRole.MANAGER.value:
+        if payload.effective_from < today:
+            raise HTTPException(status_code=403, detail="Managers cannot backdate assignments")
+        await ensure_user_in_scope(db, current_user, user, payload.effective_from)
+    unit = (
+        await active_unit(db, current_user.org_id, payload.unit_id)
+        if payload.unit_id is not None
+        else None
+    )
+    if (
+        unit is not None
+        and current_user.role == UserRole.MANAGER.value
+        and unit.id not in await managed_unit_ids(db, current_user)
+    ):
+        raise HTTPException(status_code=403, detail="Unit is outside manager scope")
+    await replace_unit_assignment(
+        db,
+        user,
+        unit.id if unit is not None else None,
+        payload.effective_from,
+    )
+    await db.flush()
+    await sync_legacy_department(db, user, today)
+    await db.commit()
+    return await user_response(db, user, today)
+
+
+@router.get(
+    "/{user_id}/shift-assignments",
+    response_model=list[ShiftAssignmentResponse],
+)
+async def list_shift_assignments(
+    user_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_operator)],
+) -> list[ShiftAssignmentResponse]:
+    user = await load_user(db, current_user.org_id, user_id)
+    await ensure_user_in_scope(db, current_user, user)
+    rows = (
+        await db.execute(
+            select(UserShiftAssignment, Shift)
+            .join(Shift, Shift.id == UserShiftAssignment.shift_id)
+            .where(UserShiftAssignment.user_id == user.id)
+            .order_by(UserShiftAssignment.effective_from)
+        )
+    ).all()
+    return [
+        ShiftAssignmentResponse(
+            id=assignment.id,
+            user_id=user.id,
+            shift=ShiftSummary.model_validate(shift),
+            effective_from=assignment.effective_from,
+            effective_to=assignment.effective_to,
+            created_at=assignment.created_at,
+            updated_at=assignment.updated_at,
+        )
+        for assignment, shift in rows
+    ]
+
+
+@router.put("/{user_id}/shift-assignment", response_model=UserResponse)
+async def put_shift_assignment(
+    user_id: UUID,
+    payload: ShiftAssignmentUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_operator)],
+) -> UserResponse:
+    user = await load_user(db, current_user.org_id, user_id)
+    ensure_target_user_mutable(current_user, user)
+    org = await load_org(db, current_user.org_id)
+    today = local_day_bounds(org.timezone)[0]
+    if current_user.role == UserRole.MANAGER.value:
+        if payload.effective_from < today:
+            raise HTTPException(status_code=403, detail="Managers cannot backdate assignments")
+        await ensure_user_in_scope(db, current_user, user, payload.effective_from)
+    shift = (
+        await active_shift(db, current_user.org_id, payload.shift_id)
+        if payload.shift_id is not None
+        else None
+    )
+    await replace_shift_assignment(
+        db,
+        user,
+        shift.id if shift is not None else None,
+        payload.effective_from,
+    )
+    await db.commit()
+    return await user_response(db, user, today)
+
+
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(
     user_id: UUID,
@@ -577,8 +1023,9 @@ async def get_user(
     Admin only.
     """
     user = await load_user(db, current_user.org_id, user_id)
-
-    return UserResponse.model_validate(user)
+    await ensure_user_in_scope(db, current_user, user)
+    org = await load_org(db, current_user.org_id)
+    return await user_response(db, user, local_day_bounds(org.timezone)[0])
 
 
 @router.patch("/{user_id}", response_model=UserResponse)
@@ -595,16 +1042,25 @@ async def update_user(
     """
     user = await load_user(db, current_user.org_id, user_id)
     ensure_target_user_mutable(current_user, user)
+    await ensure_user_in_scope(db, current_user, user)
+    org = await load_org(db, current_user.org_id)
+    today = local_day_bounds(org.timezone)[0]
+    was_active = user.is_active
 
     # Update fields if provided
     update_data = user_data.model_dump(exclude_unset=True)
+    if not was_active and update_data.get("is_active") is True:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Use the activation endpoint to assign a valid unit",
+        )
     if "role" in update_data and update_data["role"] is not None:
         role = update_data["role"]
         ensure_role_assignment_allowed(current_user, role.value)
         update_data["role"] = role.value
 
     # Check email uniqueness if being updated
-    if "email" in update_data and update_data["email"]:
+    if update_data.get("email"):
         existing = await db.execute(
             select(User).where(
                 User.org_id == current_user.org_id,
@@ -619,7 +1075,7 @@ async def update_user(
             )
 
     # Check external_id uniqueness if being updated
-    if "external_id" in update_data and update_data["external_id"]:
+    if update_data.get("external_id"):
         existing = await db.execute(
             select(User).where(
                 User.org_id == current_user.org_id,
@@ -633,13 +1089,25 @@ async def update_user(
                 detail={"code": "USER_CONFLICT", "message": "External ID already exists"},
             )
 
+    was_manager = user.role == UserRole.MANAGER.value
     for field, value in update_data.items():
         setattr(user, field, value)
+    if (
+        was_manager
+        and (
+            update_data.get("role") not in (None, UserRole.MANAGER.value)
+            or update_data.get("is_active") is False
+        )
+    ):
+        await clear_manager_scopes(db, user)
+    if was_active and update_data.get("is_active") is False:
+        await close_assignments_for_deactivation(db, user, today)
+        await sync_legacy_department(db, user, today)
 
     await commit_or_conflict(db)
     await db.refresh(user)
 
-    return UserResponse.model_validate(user)
+    return await user_response(db, user, today)
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -655,6 +1123,9 @@ async def delete_user(
     """
     user = await load_user(db, current_user.org_id, user_id)
     ensure_target_user_mutable(current_user, user)
+    await ensure_user_in_scope(db, current_user, user)
+    org = await load_org(db, current_user.org_id)
+    today = local_day_bounds(org.timezone)[0]
 
     # Prevent deleting self
     if user.id == current_user.id:
@@ -665,6 +1136,10 @@ async def delete_user(
 
     # Soft delete
     user.is_active = False
+    if user.role == UserRole.MANAGER.value:
+        await clear_manager_scopes(db, user)
+    await close_assignments_for_deactivation(db, user, today)
+    await sync_legacy_department(db, user, today)
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -679,6 +1154,7 @@ async def enroll_user_face(
 ) -> UserEnrollResponse:
     user = await load_user(db, current_user.org_id, user_id)
     ensure_target_user_mutable(current_user, user)
+    await ensure_user_in_scope(db, current_user, user)
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Cannot enroll inactive user")
 
@@ -728,16 +1204,13 @@ async def enroll_user_face(
             )
         analyses.append(analysis)
 
-    await db.execute(delete(FaceEmbedding).where(FaceEmbedding.user_id == user.id))
-    for index, analysis in enumerate(analyses):
-        db.add(
-            FaceEmbedding(
-                user_id=user.id,
-                embedding=analysis.embedding,
-                quality_score=analysis.quality_score,
-                is_primary=index == 0,
-            )
-        )
+    await replace_face_identity(
+        db,
+        org_id=org.id,
+        user_id=user.id,
+        analyses=analyses,
+        collision_threshold=policy.face_match_threshold,
+    )
     user.enrolled_at = utc_now()
     try:
         await db.commit()
@@ -764,6 +1237,7 @@ async def get_face_status(
     Admin only.
     """
     user = await load_user(db, current_user.org_id, user_id)
+    await ensure_user_in_scope(db, current_user, user)
 
     # Count embeddings
     result = await db.execute(
@@ -791,6 +1265,7 @@ async def delete_face_embeddings(
     """
     user = await load_user(db, current_user.org_id, user_id)
     ensure_target_user_mutable(current_user, user)
+    await ensure_user_in_scope(db, current_user, user)
 
     # Delete all embeddings for this user
 
@@ -805,22 +1280,39 @@ async def delete_face_embeddings(
 @router.post("/{user_id}/activate", response_model=UserResponse)
 async def activate_user(
     user_id: UUID,
+    request: UserActivationRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(require_operator)],
 ) -> UserResponse:
-    """
-    Activate a user account.
-
-    Admin only.
-    """
     user = await load_user(db, current_user.org_id, user_id)
     ensure_target_user_mutable(current_user, user)
-
+    org = await load_org(db, current_user.org_id)
+    today = local_day_bounds(org.timezone)[0]
+    unit = await active_unit(db, current_user.org_id, request.unit_id)
+    if current_user.role == UserRole.MANAGER.value:
+        scope_ids = await managed_unit_ids(db, current_user)
+        last_unit_id = await db.scalar(
+            select(UserUnitAssignment.unit_id)
+            .where(UserUnitAssignment.user_id == user.id)
+            .order_by(UserUnitAssignment.effective_from.desc())
+            .limit(1)
+        )
+        if last_unit_id not in scope_ids or unit.id not in scope_ids:
+            raise HTTPException(status_code=403, detail="Unit is outside manager scope")
+    shift = (
+        await active_shift(db, current_user.org_id, request.shift_id)
+        if request.shift_id is not None
+        else None
+    )
     user.is_active = True
+    await replace_unit_assignment(db, user, unit.id, today)
+    if shift is not None:
+        await replace_shift_assignment(db, user, shift.id, today)
+    await db.flush()
+    await sync_legacy_department(db, user, today)
     await db.commit()
     await db.refresh(user)
-
-    return UserResponse.model_validate(user)
+    return await user_response(db, user, today)
 
 
 @router.post("/{user_id}/deactivate", response_model=UserResponse)
@@ -829,26 +1321,25 @@ async def deactivate_user(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(require_operator)],
 ) -> UserResponse:
-    """
-    Deactivate a user account.
-
-    Admin only.
-    """
     user = await load_user(db, current_user.org_id, user_id)
     ensure_target_user_mutable(current_user, user)
-
-    # Prevent deactivating self
+    await ensure_user_in_scope(db, current_user, user)
     if user.id == current_user.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot deactivate your own account",
         )
-
+    org = await load_org(db, current_user.org_id)
+    today = local_day_bounds(org.timezone)[0]
     user.is_active = False
+    if user.role == UserRole.MANAGER.value:
+        await clear_manager_scopes(db, user)
+    await close_assignments_for_deactivation(db, user, today)
+    await db.flush()
+    await sync_legacy_department(db, user, today)
     await db.commit()
     await db.refresh(user)
-
-    return UserResponse.model_validate(user)
+    return await user_response(db, user, today)
 
 
 @router.post("/{user_id}/reset-password")
@@ -865,6 +1356,7 @@ async def reset_user_password(
     """
     user = await load_user(db, current_user.org_id, user_id)
     ensure_target_user_mutable(current_user, user)
+    await ensure_user_in_scope(db, current_user, user)
 
     user.password_hash = hash_password(request.new_password)
     await db.commit()

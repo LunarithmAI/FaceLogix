@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_admin, require_operator
+from app.api.deps import require_admin
 from app.api.tenant import load_org
 from app.core.config import settings
 from app.core.database import get_db
@@ -41,7 +41,7 @@ def org_response(org: Org) -> OrgSettingsResponse:
 
 @router.get("/org", response_model=OrgSettingsResponse)
 async def get_org_settings(
-    current_user: Annotated[User, Depends(require_operator)],
+    current_user: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> OrgSettingsResponse:
     return org_response(await load_org(db, current_user.org_id))
@@ -69,7 +69,7 @@ async def update_org_settings(
 
 @router.get("/system", response_model=SystemInfoResponse)
 async def get_system_info(
-    current_user: Annotated[User, Depends(require_operator)],
+    current_user: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
     face_client: Annotated[FaceServiceClient, Depends(get_face_client)],
 ) -> SystemInfoResponse:

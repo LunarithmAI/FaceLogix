@@ -22,7 +22,9 @@ const menuItemClass =
 
 export function Header({ onOpenSidebar, menuButtonRef }: HeaderProps) {
   const navigate = useNavigate();
-  const { user, logout } = useAuthStore();
+  const session = useAuthStore((state) => state.session);
+  const logout = useAuthStore((state) => state.logout);
+  const user = session?.kind === 'user' ? session.user : null;
 
   const handleLogout = async () => {
     await logout();

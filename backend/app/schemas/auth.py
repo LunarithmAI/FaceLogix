@@ -4,6 +4,10 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.schemas.device import DeviceSettingsData
+from app.schemas.shift import ShiftSummary
+from app.schemas.unit import UnitSummary
+
 
 class LoginRequest(BaseModel):
     """User login request."""
@@ -32,7 +36,7 @@ class LoginResponse(BaseModel):
 
     access_token: str
     refresh_token: str
-    token_type: str = "bearer"  # noqa: S105 - OAuth token scheme, not a secret
+    token_type: str = "bearer"
     user_id: UUID
     org_id: UUID
     role: str
@@ -49,7 +53,7 @@ class RefreshResponse(BaseModel):
     """Token refresh response."""
 
     access_token: str
-    token_type: str = "bearer"  # noqa: S105 - OAuth token scheme, not a secret
+    token_type: str = "bearer"
 
 
 class LogoutRequest(BaseModel):
@@ -69,10 +73,11 @@ class DeviceLoginResponse(BaseModel):
     """Device authentication response."""
 
     device_token: str
-    token_type: str = "bearer"  # noqa: S105 - OAuth token scheme, not a secret
+    token_type: str = "bearer"
+    device_id: UUID
     org_id: UUID
     device_name: str
-
+    settings: DeviceSettingsData
 
 class TokenPayload(BaseModel):
     """JWT token payload."""
@@ -100,7 +105,9 @@ class UserProfileResponse(BaseModel):
     email: str | None
     name: str
     role: str
-    department: str | None
+    current_unit: UnitSummary | None
+    current_shift: ShiftSummary | None
+    managed_units: list[UnitSummary]
     is_active: bool
     enrolled_at: datetime | None
     created_at: datetime

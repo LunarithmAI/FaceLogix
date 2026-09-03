@@ -8,10 +8,24 @@ import { Modal, ConfirmModal, ModalFooter } from '@/components/ui/Modal';
 import { DeviceTable } from '@/components/admin/DeviceTable';
 import { Loading } from '@/components/ui/Loading';
 import { devicesApi } from '@/services/devices';
-import type { Device, DeviceCredential, DeviceRegistration, DeviceType } from '@/types/device';
+import type {
+  Device,
+  DeviceCredential,
+  DeviceMode,
+  DeviceRegistration,
+  DeviceSettings,
+  DeviceType,
+} from '@/types/device';
 import { queryClient, queryKeys } from '@/lib/queryClient';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { translate as t } from '@/i18n';
+
+const DEFAULT_DEVICE_SETTINGS: DeviceSettings = {
+  allow_check_in: true,
+  allow_check_out: true,
+  default_mode: 'check_in',
+  camera_facing: 'user',
+};
 
 export function DevicesPage() {
   const [search, setSearch] = useState('');
@@ -21,14 +35,17 @@ export function DevicesPage() {
   // Modal states
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isRegenerateOpen, setIsRegenerateOpen] = useState(false);
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   const [newCredential, setNewCredential] = useState<DeviceCredential | null>(null);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
     name: '',
     device_type: 'kiosk' as DeviceType,
     location: '',
+    settings: { ...DEFAULT_DEVICE_SETTINGS },
   });
 
   const devicesQuery = useQuery({
@@ -51,7 +68,15 @@ export function DevicesPage() {
   const saveMutation = useMutation({
     mutationFn: async (input: { deviceId?: string; data: DeviceRegistration }) => {
       if (input.deviceId !== undefined) {
-        const device = await devicesApi.update(input.deviceId, input.data);
+        await devicesApi.update(input.deviceId, {
+          name: input.data.name,
+          device_type: input.data.device_type,
+          location: input.data.location,
+        });
+        const device = await devicesApi.updateSettings(
+          input.deviceId,
+          input.data.settings ?? DEFAULT_DEVICE_SETTINGS
+        );
         return { kind: 'updated' as const, device };
       }
       const device = await devicesApi.register(input.data);
@@ -74,9 +99,19 @@ export function DevicesPage() {
       await queryClient.invalidateQueries({ queryKey: ['devices'] });
     },
   });
+  const regenerateMutation = useMutation({
+    mutationFn: (deviceId: string) => devicesApi.regenerateSecret(deviceId),
+    onSuccess: async (credential) => {
+      setIsRegenerateOpen(false);
+      setNewCredential(credential);
+      await queryClient.invalidateQueries({ queryKey: ['devices'] });
+    },
+  });
   const devices = devicesQuery.data;
-  const isSubmitting = saveMutation.isPending || deleteMutation.isPending;
-  const actionError = saveMutation.error ?? deleteMutation.error ?? toggleMutation.error;
+  const isSubmitting =
+    saveMutation.isPending || deleteMutation.isPending || regenerateMutation.isPending;
+  const actionError =
+    saveMutation.error ?? deleteMutation.error ?? toggleMutation.error ?? regenerateMutation.error;
 
   const handleSearch = (value: string) => {
     setSearch(value);
@@ -85,16 +120,24 @@ export function DevicesPage() {
 
   const handleCreate = () => {
     setSelectedDevice(null);
-    setFormData({ name: '', device_type: 'kiosk', location: '' });
+    setSettingsError(null);
+    setFormData({
+      name: '',
+      device_type: 'kiosk',
+      location: '',
+      settings: { ...DEFAULT_DEVICE_SETTINGS },
+    });
     setIsFormOpen(true);
   };
 
   const handleEdit = (device: Device) => {
     setSelectedDevice(device);
+    setSettingsError(null);
     setFormData({
       name: device.name,
       device_type: device.device_type,
       location: device.location || '',
+      settings: { ...device.settings },
     });
     setIsFormOpen(true);
   };
@@ -108,11 +151,38 @@ export function DevicesPage() {
     toggleMutation.mutate(device);
   };
 
+  const handleRegenerateSecret = (device: Device) => {
+    setSelectedDevice(device);
+    setIsRegenerateOpen(true);
+  };
+
+  const setActionEnabled = (
+    action: 'allow_check_in' | 'allow_check_out',
+    enabled: boolean
+  ) => {
+    const settings = { ...formData.settings, [action]: enabled };
+    if (settings.allow_check_in !== settings.allow_check_out) {
+      settings.default_mode = settings.allow_check_in ? 'check_in' : 'check_out';
+    }
+    setFormData({ ...formData, settings });
+  };
+
   const handleFormSubmit = () => {
+    const { settings } = formData;
+    if (
+      (settings.allow_check_in || settings.allow_check_out) &&
+      ((settings.default_mode === 'check_in' && !settings.allow_check_in) ||
+        (settings.default_mode === 'check_out' && !settings.allow_check_out))
+    ) {
+      setSettingsError(t('Default mode must be enabled'));
+      return;
+    }
+    setSettingsError(null);
     const data: DeviceRegistration = {
       name: formData.name,
       device_type: formData.device_type,
       location: formData.location || undefined,
+      settings,
     };
     saveMutation.mutate(
       {
@@ -137,6 +207,12 @@ export function DevicesPage() {
     deleteMutation.mutate(selectedDevice.id, {
       onSuccess: () => setIsDeleteOpen(false),
     });
+  };
+
+  const handleConfirmRegenerate = () => {
+    if (selectedDevice !== null) {
+      regenerateMutation.mutate(selectedDevice.id);
+    }
   };
 
   return (
@@ -201,6 +277,7 @@ export function DevicesPage() {
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 onToggleStatus={handleToggleStatus}
+                onRegenerateSecret={handleRegenerateSecret}
               />
 
               {/* Pagination */}
@@ -279,6 +356,93 @@ export function DevicesPage() {
             onChange={(e) => setFormData({ ...formData, location: e.target.value })}
             placeholder={t('Building A, Floor 1')}
           />
+
+          <fieldset className="space-y-3 border border-gray-200 p-4">
+            <legend className="px-1 text-sm font-semibold text-gray-900">
+              {t('Kiosk actions')}
+            </legend>
+            <label className="flex min-h-11 items-center gap-3 text-sm text-gray-800">
+              <input
+                type="checkbox"
+                checked={formData.settings.allow_check_in}
+                onChange={(event) => setActionEnabled('allow_check_in', event.target.checked)}
+                className="h-5 w-5 border-gray-300 text-primary-600 focus:ring-primary-500"
+              />
+              {t('Allow check-in')}
+            </label>
+            <label className="flex min-h-11 items-center gap-3 text-sm text-gray-800">
+              <input
+                type="checkbox"
+                checked={formData.settings.allow_check_out}
+                onChange={(event) => setActionEnabled('allow_check_out', event.target.checked)}
+                className="h-5 w-5 border-gray-300 text-primary-600 focus:ring-primary-500"
+              />
+              {t('Allow check-out')}
+            </label>
+            {!formData.settings.allow_check_in && !formData.settings.allow_check_out && (
+              <p className="text-sm text-amber-700" role="status">
+                {t('This kiosk will be blocked until an action is enabled.')}
+              </p>
+            )}
+          </fieldset>
+
+          <div>
+            <label
+              htmlFor="default-mode"
+              className="mb-1 block text-sm font-medium text-gray-700"
+            >
+              {t('Default mode')}
+            </label>
+            <select
+              id="default-mode"
+              value={formData.settings.default_mode}
+              onChange={(event) =>
+                setFormData({
+                  ...formData,
+                  settings: {
+                    ...formData.settings,
+                    default_mode: event.target.value as DeviceMode,
+                  },
+                })
+              }
+              className="block min-h-11 w-full border border-gray-300 bg-white px-4 py-2 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="check_in">{t('Check In')}</option>
+              <option value="check_out">{t('Check Out')}</option>
+            </select>
+          </div>
+
+          <div>
+            <label
+              htmlFor="camera-facing"
+              className="mb-1 block text-sm font-medium text-gray-700"
+            >
+              {t('Camera facing')}
+            </label>
+            <select
+              id="camera-facing"
+              value={formData.settings.camera_facing}
+              onChange={(event) =>
+                setFormData({
+                  ...formData,
+                  settings: {
+                    ...formData.settings,
+                    camera_facing: event.target.value as 'user' | 'environment',
+                  },
+                })
+              }
+              className="block min-h-11 w-full border border-gray-300 bg-white px-4 py-2 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="user">{t('Front camera')}</option>
+              <option value="environment">{t('Rear camera')}</option>
+            </select>
+          </div>
+
+          {settingsError !== null && (
+            <p className="text-sm text-red-700" role="alert">
+              {settingsError}
+            </p>
+          )}
         </div>
 
         <ModalFooter>
@@ -326,6 +490,20 @@ export function DevicesPage() {
         confirmText={t('Delete')}
         variant="danger"
         isLoading={isSubmitting}
+      />
+
+      <ConfirmModal
+        isOpen={isRegenerateOpen}
+        onClose={() => setIsRegenerateOpen(false)}
+        onConfirm={handleConfirmRegenerate}
+        title={t('Regenerate device secret')}
+        message={t(
+          'Regenerating the secret disconnects the current kiosk session. Continue for {{name}}?',
+          { name: selectedDevice?.name }
+        )}
+        confirmText={t('Regenerate secret')}
+        variant="danger"
+        isLoading={regenerateMutation.isPending}
       />
     </>
   );

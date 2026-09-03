@@ -6,6 +6,7 @@ import {
   ShieldCheckIcon,
   CheckCircleIcon,
   CalendarIcon,
+  ArrowLeftOnRectangleIcon,
 } from '@heroicons/react/24/outline';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -16,9 +17,11 @@ import { authApi } from '@/services/auth';
 import { queryKeys } from '@/lib/queryClient';
 import { formatShortDate } from '@/utils/date';
 import { translate as t } from '@/i18n';
+import { useAuthStore } from '@/stores/authStore';
 
 
 export function ProfilePage() {
+  const logout = useAuthStore((state) => state.logout);
   const profileQuery = useQuery({
     queryKey: queryKeys.profile,
     queryFn: ({ signal }) => authApi.getCurrentUser(signal),
@@ -86,9 +89,19 @@ export function ProfilePage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">{t('Your Profile')}</h1>
-        <p className="text-gray-500 mt-1">{t('View and manage your account information')}</p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">{t('Your Profile')}</h1>
+          <p className="mt-1 text-gray-500">{t('View and manage your account information')}</p>
+        </div>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => void logout()}
+          leftIcon={<ArrowLeftOnRectangleIcon className="h-5 w-5" />}
+        >
+          {t('Sign out')}
+        </Button>
       </div>
 
       {/* Messages */}
@@ -152,8 +165,12 @@ export function ProfilePage() {
                   <dd className="mt-1 text-gray-900">{displayProfile.email || t('Not set')}</dd>
                 </div>
                 <div>
-                  <dt className="block text-sm font-medium text-gray-500">{t('Department')}</dt>
-                  <dd className="mt-1 text-gray-900">{displayProfile.department || t('Not assigned')}</dd>
+                  <dt className="block text-sm font-medium text-gray-500">{t('Unit')}</dt>
+                  <dd className="mt-1 text-gray-900">{displayProfile.current_unit?.name || t('Not assigned')}</dd>
+                </div>
+                <div>
+                  <dt className="block text-sm font-medium text-gray-500">{t('Shift')}</dt>
+                  <dd className="mt-1 text-gray-900">{displayProfile.current_shift?.name || t('Not assigned')}</dd>
                 </div>
                 <div>
                   <dt className="block text-sm font-medium text-gray-500">{t('Member Since')}</dt>

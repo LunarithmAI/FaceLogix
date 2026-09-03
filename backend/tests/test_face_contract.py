@@ -6,9 +6,7 @@ import httpx
 import pytest
 from fastapi import HTTPException
 
-from app.api.v1 import attendance
 from app.api.v1.users import enroll_user_face
-from app.core.identity import AuthenticatedIdentity, UserRole
 from app.core.images import ImagePayloadError, decode_image_payload
 from app.core.time import local_date_bounds
 from app.models.face_embedding import FaceEmbedding
@@ -153,11 +151,17 @@ class EnrollmentSession:
         self.scalar_calls += 1
         return self.user if self.scalar_calls == 1 else self.org
 
-    async def execute(self, _statement: object) -> None:
+    async def execute(
+        self, _statement: object, _parameters: object | None = None
+    ) -> list[object]:
         self.executed += 1
+        return []
 
     def add(self, entity: FaceEmbedding) -> None:
         self.added.append(entity)
+
+    async def flush(self) -> None:
+        return None
 
     async def commit(self) -> None:
         self.commits += 1
@@ -233,180 +237,40 @@ async def test_enrollment_replaces_once_with_exactly_one_primary() -> None:
         FakeFaceClient([analysis(), analysis()]),  # type: ignore[arg-type]
     )
     assert result.embeddings_count == 2
-    assert session.executed == 1
+    assert session.executed == 4
     assert session.commits == 1
     assert [embedding.is_primary for embedding in session.added] == [True, False]
     assert target.enrolled_at is not None and target.enrolled_at.tzinfo is UTC
 
 
-class ScalarValues:
-    def __init__(self, values: list[str]) -> None:
-        self.values = values
-
-    def all(self) -> list[str]:
-        return self.values
-
-
-class AttendanceSession:
-    def __init__(self, org: Org, user: User, existing_types: list[str] | None = None) -> None:
-        self.org = org
-        self.user = user
-        self.existing_types = existing_types or []
-        self.added: list[object] = []
-        self.commits = 0
-        self.scalar_calls = 0
-
-    async def get(self, model: type[object], entity_id: object) -> object | None:
-        if model is Org and entity_id == self.org.id:
-            return self.org
-        if model is User and entity_id == self.user.id:
-            return self.user
-        return None
-
-    async def scalar(self, _statement: object) -> object:
-        self.scalar_calls += 1
-        return self.org if self.scalar_calls == 1 else self.user
-
-    async def scalars(self, _statement: object) -> ScalarValues:
-        return ScalarValues(self.existing_types)
-
-    def add(self, entity: object) -> None:
-        self.added.append(entity)
-
-    async def commit(self) -> None:
-        self.commits += 1
-
-
-@pytest.mark.parametrize(
-    ("code", "expected_status"),
-    [
-        ("INVALID_IMAGE", "invalid_image"),
-        ("NO_FACE", "no_face_detected"),
-        ("MULTIPLE_FACES", "multiple_faces"),
-        ("LOW_QUALITY", "low_quality"),
-    ],
-)
-def test_attendance_maps_recoverable_face_errors(
-    code: str,
-    expected_status: str,
-) -> None:
-    result = attendance.face_failure_response(FaceServiceError(400, code, "retry"))
-    assert result.success is False
-    assert result.status == expected_status
-
-
-@pytest.mark.asyncio
-async def test_pad_rejection_and_checkout_state_store_no_event(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    actor, user, org = enrollment_entities()
-    identity = AuthenticatedIdentity(
-        subject_id=actor.id,
-        org_id=org.id,
-        kind="user",
-        role=UserRole.ADMIN,
-    )
+def test_attendance_request_accepts_only_an_image() -> None:
     request = CheckInRequest(image=encoded_jpeg())
-
-    spoof_session = AttendanceSession(org, user)
-    spoof = await attendance.process_attendance(
-        "check_in",
-        request,
-        spoof_session,  # type: ignore[arg-type]
-        identity,
-        FakeFaceClient([analysis(0.2)]),  # type: ignore[arg-type]
-    )
-    assert spoof.status == "spoof_detected"
-    assert spoof_session.added == []
-    assert spoof_session.commits == 0
-
-    async def matched(*_args: object, **_kwargs: object) -> list[tuple[object, float]]:
-        return [(user.id, 0.95)]
-
-    monkeypatch.setattr(attendance, "find_similar_faces", matched)
-    checkout_session = AttendanceSession(org, user)
-    checkout = await attendance.process_attendance(
-        "check_out",
-        request,
-        checkout_session,  # type: ignore[arg-type]
-        identity,
-        FakeFaceClient([analysis()]),  # type: ignore[arg-type]
-    )
-    assert checkout.status == "not_checked_in"
-    assert checkout_session.added == []
-    assert checkout_session.commits == 0
-
-    repeated_checkout_session = AttendanceSession(
-        org,
-        user,
-        existing_types=["check_in", "check_out"],
-    )
-    repeated_checkout = await attendance.process_attendance(
-        "check_out",
-        request,
-        repeated_checkout_session,  # type: ignore[arg-type]
-        identity,
-        FakeFaceClient([analysis()]),  # type: ignore[arg-type]
-    )
-    assert repeated_checkout.status == "already_checked_out"
-    assert repeated_checkout_session.commits == 0
-
-    duplicate_checkin_session = AttendanceSession(
-        org,
-        user,
-        existing_types=["check_in"],
-    )
-    duplicate_checkin = await attendance.process_attendance(
-        "check_in",
-        request,
-        duplicate_checkin_session,  # type: ignore[arg-type]
-        identity,
-        FakeFaceClient([analysis()]),  # type: ignore[arg-type]
-    )
-    assert duplicate_checkin.status == "already_checked_in"
-    assert duplicate_checkin_session.commits == 0
-
-
-def test_canonical_settings_validate_timezone_and_preserve_zero() -> None:
-    patch = OrgSettingsPatch(late_threshold_minutes=0)
-    assert patch.model_dump(exclude_none=True)["late_threshold_minutes"] == 0
-    exposed = canonical_org_settings(
-        {
-            "allow_remote_checkin": True,
-            "recognition_threshold": 0.2,
-        }
-    ).model_dump()
-    assert "allow_remote_checkin" not in exposed
-    assert "recognition_threshold" not in exposed
+    assert request.model_dump() == {"image": encoded_jpeg()}
     with pytest.raises(ValueError):
-        OrgSettingsUpdate(timezone="Not/A_Real_Zone")
+        CheckInRequest.model_validate(
+            {
+                "image": encoded_jpeg(),
+                "timestamp": "2026-07-01T09:00:00Z",
+                "device_id": str(uuid4()),
+            }
+        )
 
 
-def test_check_in_deadline_uses_organization_local_time_and_grace() -> None:
-    _, _, org = enrollment_entities()
-    org.timezone = "America/New_York"
-    policy = canonical_org_settings(
+def test_schedule_policy_is_not_accepted_as_organization_settings() -> None:
+    with pytest.raises(ValueError):
+        OrgSettingsPatch.model_validate({"late_threshold_minutes": 0})
+    exposed = canonical_org_settings(
         {
             "work_start_time": "09:00",
             "late_threshold_minutes": 15,
+            "face_match_threshold": 0.75,
         }
-    )
-    assert (
-        attendance.calculate_check_in_status(
-            org,
-            policy,
-            datetime(2026, 7, 1, 13, 15, tzinfo=UTC),
-        )
-        == "on_time"
-    )
-    assert (
-        attendance.calculate_check_in_status(
-            org,
-            policy,
-            datetime(2026, 7, 1, 13, 16, tzinfo=UTC),
-        )
-        == "late"
-    )
+    ).model_dump()
+    assert "work_start_time" not in exposed
+    assert "late_threshold_minutes" not in exposed
+    assert exposed["face_match_threshold"] == 0.75
+    with pytest.raises(ValueError):
+        OrgSettingsUpdate(timezone="Not/A_Real_Zone")
 
 
 def test_local_day_boundaries_follow_dst() -> None:

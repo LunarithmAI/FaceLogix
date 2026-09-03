@@ -4,7 +4,6 @@ import { attendanceApi } from '@/services/attendance';
 import type { CheckInResult, CheckType } from '@/types/attendance';
 
 interface UseCheckInOptions {
-  deviceId?: string;
   onSuccess?: (result: CheckInResult) => void;
   onError?: (error: Error) => void;
 }
@@ -20,14 +19,14 @@ interface UseCheckInReturn {
 }
 
 export function useCheckIn(options: UseCheckInOptions = {}): UseCheckInReturn {
-  const { deviceId, onSuccess, onError } = options;
+  const { onSuccess, onError } = options;
 
   const [result, setResult] = useState<CheckInResult | null>(null);
   const [lastCheckType, setLastCheckType] = useState<CheckType | null>(null);
   const [error, setError] = useState<Error | null>(null);
 
   const checkInMutation = useMutation({
-    mutationFn: (imageData: string) => attendanceApi.checkIn(imageData, deviceId),
+    mutationFn: (imageData: string) => attendanceApi.checkIn(imageData),
     onSuccess: (data) => {
       setResult(data);
       setLastCheckType('check_in');
@@ -42,7 +41,7 @@ export function useCheckIn(options: UseCheckInOptions = {}): UseCheckInReturn {
   });
 
   const checkOutMutation = useMutation({
-    mutationFn: (imageData: string) => attendanceApi.checkOut(imageData, deviceId),
+    mutationFn: (imageData: string) => attendanceApi.checkOut(imageData),
     onSuccess: (data) => {
       setResult(data);
       setLastCheckType('check_out');

@@ -48,6 +48,7 @@ const statusConfig: Record<CheckStatus, StatusConfig> = {
     iconColor: 'text-green-500',
   },
   failed: { ...errorConfig, title: 'Check Failed' },
+  ambiguous_face: { ...warningConfig, title: 'Ambiguous Face Match' },
   invalid_image: { ...errorConfig, title: 'Invalid Image' },
   spoof_detected: { ...errorConfig, title: 'Liveness Check Failed' },
   already_checked_in: { ...warningConfig, title: 'Already Checked In' },

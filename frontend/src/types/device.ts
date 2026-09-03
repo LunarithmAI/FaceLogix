@@ -1,13 +1,12 @@
 export type DeviceType = 'kiosk' | 'tablet' | 'mobile' | 'web';
+export type DeviceMode = 'check_in' | 'check_out';
+export type CameraFacing = 'user' | 'environment';
 
 export interface DeviceSettings {
-  camera_facing?: 'user' | 'environment';
-  auto_capture?: boolean;
-  capture_delay_ms?: number;
-  require_liveness?: boolean;
-  allow_check_in?: boolean;
-  allow_check_out?: boolean;
-  [key: string]: unknown;
+  allow_check_in: boolean;
+  allow_check_out: boolean;
+  default_mode: DeviceMode;
+  camera_facing: CameraFacing;
 }
 
 export interface Device {
@@ -32,6 +31,20 @@ export interface DeviceRegistration {
   device_type: DeviceType;
   location?: string;
   settings?: DeviceSettings;
+}
+
+export interface DeviceLoginCredentials {
+  device_id: string;
+  device_secret: string;
+}
+
+export interface DeviceLoginResponse {
+  device_token: string;
+  token_type: string;
+  device_id: string;
+  org_id: string;
+  device_name: string;
+  settings: DeviceSettings;
 }
 
 export interface DeviceInfo {

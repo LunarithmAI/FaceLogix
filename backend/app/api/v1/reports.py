@@ -1,38 +1,53 @@
 import csv
 import io
+from collections import defaultdict
 from datetime import date, timedelta
-from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from sqlalchemy import Date, cast, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
-from app.api.deps import require_operator
+from app.api.deps import ensure_user_in_scope, managed_unit_ids, require_operator
 from app.api.tenant import load_org, load_user
 from app.core.database import get_db
-from app.core.time import local_date_bounds, local_day_bounds
+from app.core.identity import UserRole
+from app.core.time import local_day_bounds
 from app.models.attendance_log import AttendanceLog
 from app.models.device import Device
 from app.models.org import Org
+from app.models.organizational_unit import OrganizationalUnit
+from app.models.shift import Shift
 from app.models.user import User
 from app.schemas.report import (
     AttendanceCounts,
     AttendanceRates,
     DashboardStats,
     DashboardToday,
-    DepartmentSummary,
     RecentActivity,
     ReportDailySummary,
     ReportPeriod,
     UserAttendanceStats,
     WeeklyTrendPoint,
 )
+from app.schemas.report import (
+    UnitSummary as UnitReportSummary,
+)
+from app.schemas.unit import UnitSummary
+from app.services.attendance_records import effective_attendance_condition
+from app.services.scheduling import ScheduleResolution, schedule_rows_for_date
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 MAX_REPORT_DAYS = 366
+
+
+async def operator_scope_ids(db: AsyncSession, actor: User) -> set[UUID] | None:
+    if actor.role != UserRole.MANAGER.value:
+        return None
+    return await managed_unit_ids(db, actor)
 
 
 def validate_range(from_date: date, to_date: date) -> None:
@@ -40,10 +55,7 @@ def validate_range(from_date: date, to_date: date) -> None:
     if span < 1:
         raise HTTPException(
             status_code=422,
-            detail={
-                "code": "INVALID_DATE_RANGE",
-                "message": "from_date must not exceed to_date",
-            },
+            detail={"code": "INVALID_DATE_RANGE", "message": "from_date must not exceed to_date"},
         )
     if span > MAX_REPORT_DAYS:
         raise HTTPException(
@@ -55,80 +67,105 @@ def validate_range(from_date: date, to_date: date) -> None:
         )
 
 
-def working_day_count(from_date: date, to_date: date) -> int:
-    return sum(
-        1
+def days_in_range(from_date: date, to_date: date) -> list[date]:
+    return [
+        from_date + timedelta(days=offset)
         for offset in range((to_date - from_date).days + 1)
-        if (from_date + timedelta(days=offset)).weekday() < 5
-    )
+    ]
 
 
-def format_average_minutes(average_minutes: Decimal | float | None) -> str | None:
-    if average_minutes is None:
-        return None
-    minutes = int(average_minutes)
-    return f"{minutes // 60:02d}:{minutes % 60:02d}"
+def log_scope_conditions(scope_ids: set[UUID] | None) -> list[ColumnElement[bool]]:
+    return [] if scope_ids is None else [AttendanceLog.unit_id.in_(scope_ids)]
 
 
-def local_date_expression(timezone_name: str) -> ColumnElement[date]:
-    return cast(func.timezone(timezone_name, AttendanceLog.ts), Date)
-
-
-async def grouped_daily_counts(
+async def schedule_rows(
     db: AsyncSession,
     org: Org,
+    day: date,
+    scope_ids: set[UUID] | None,
+) -> list[tuple[User, ScheduleResolution]]:
+    return await schedule_rows_for_date(
+        db,
+        org_id=org.id,
+        timezone_name=org.timezone,
+        schedule_date=day,
+        scope_unit_ids=scope_ids,
+    )
+
+
+async def effective_logs(
+    db: AsyncSession,
+    org_id: UUID,
     from_date: date,
     to_date: date,
-) -> dict[date, dict[str, int]]:
-    range_start, _ = local_date_bounds(org.timezone, from_date)
-    _, range_end = local_date_bounds(org.timezone, to_date)
-    local_date = local_date_expression(org.timezone).label("local_date")
-    rows = (
-        await db.execute(
-            select(
-                local_date,
-                AttendanceLog.type,
-                AttendanceLog.status,
-                func.count(func.distinct(AttendanceLog.user_id)),
+    scope_ids: set[UUID] | None,
+    *,
+    user_id: UUID | None = None,
+) -> list[AttendanceLog]:
+    conditions = [
+        AttendanceLog.org_id == org_id,
+        AttendanceLog.schedule_date >= from_date,
+        AttendanceLog.schedule_date <= to_date,
+        effective_attendance_condition(),
+        *log_scope_conditions(scope_ids),
+    ]
+    if user_id is not None:
+        conditions.append(AttendanceLog.user_id == user_id)
+    return list(
+        (
+            await db.scalars(
+                select(AttendanceLog)
+                .where(*conditions)
+                .order_by(AttendanceLog.schedule_date, AttendanceLog.ts, AttendanceLog.id)
             )
-            .where(
-                AttendanceLog.org_id == org.id,
-                AttendanceLog.ts >= range_start,
-                AttendanceLog.ts < range_end,
-            )
-            .group_by(local_date, AttendanceLog.type, AttendanceLog.status)
-        )
-    ).all()
-    counts: dict[date, dict[str, int]] = {}
-    for local_day, attendance_type, attendance_status, count in rows:
-        key = f"{attendance_type}:{attendance_status}"
-        counts.setdefault(local_day, {})[key] = int(count)
-    return counts
-
-
-def report_daily_summary(
-    day: date,
-    total_users: int,
-    counts: dict[str, int],
-) -> ReportDailySummary:
-    on_time = counts.get("check_in:on_time", 0)
-    late = counts.get("check_in:late", 0)
-    check_ins = on_time + late
-    check_outs = sum(
-        count
-        for key, count in counts.items()
-        if key.startswith("check_out:") and key != "check_out:unknown_user"
+        ).all()
     )
+
+
+def average_local_time(logs: list[AttendanceLog], timezone_name: str) -> str | None:
+    if not logs:
+        return None
+    zone = ZoneInfo(timezone_name)
+    minutes = [log.ts.astimezone(zone).hour * 60 + log.ts.astimezone(zone).minute for log in logs]
+    average = sum(minutes) // len(minutes)
+    return f"{average // 60:02d}:{average % 60:02d}"
+
+
+async def daily_summary(
+    db: AsyncSession,
+    org: Org,
+    day: date,
+    scope_ids: set[UUID] | None,
+    logs: list[AttendanceLog] | None = None,
+) -> ReportDailySummary:
+    schedules = await schedule_rows(db, org, day, scope_ids)
+    scheduled_ids = {user.id for user, schedule in schedules if schedule.scheduled}
+    day_logs = logs if logs is not None else await effective_logs(db, org.id, day, day, scope_ids)
+    check_ins = {
+        log.user_id: log
+        for log in day_logs
+        if log.type == "check_in" and log.user_id in scheduled_ids
+    }
+    on_time = sum(log.status == "on_time" for log in check_ins.values())
+    late = sum(log.status == "late" for log in check_ins.values())
+    scheduled = len(scheduled_ids)
+    present = len(check_ins)
     return ReportDailySummary(
         date=day,
-        total_users=total_users,
-        check_ins=check_ins,
-        check_outs=check_outs,
+        total_users=scheduled,
+        check_ins=present,
+        check_outs=len(
+            {
+                log.user_id
+                for log in day_logs
+                if log.type == "check_out" and log.user_id in scheduled_ids
+            }
+        ),
         on_time=on_time,
         late=late,
-        absent=max(0, total_users - check_ins),
-        unknown_attempts=counts.get("check_in:unknown_user", 0),
-        on_time_percentage=round(on_time / check_ins * 100 if check_ins else 0, 2),
+        absent=max(0, scheduled - present),
+        unknown_attempts=sum(log.status == "unknown_user" for log in day_logs),
+        on_time_percentage=round(on_time / present * 100 if present else 0, 2),
     )
 
 
@@ -138,138 +175,84 @@ async def get_dashboard_stats(
     current_user: Annotated[User, Depends(require_operator)],
 ) -> DashboardStats:
     org = await load_org(db, current_user.org_id)
-    today, day_start, day_end = local_day_bounds(org.timezone)
-    total_users = (
-        await db.scalar(
-            select(func.count(User.id)).where(
-                User.org_id == org.id,
-                User.is_active.is_(True),
-            )
+    today = local_day_bounds(org.timezone)[0]
+    scope_ids = await operator_scope_ids(db, current_user)
+    logs = await effective_logs(db, org.id, today, today, scope_ids)
+    summary = await daily_summary(db, org, today, scope_ids, logs)
+    active_devices = await db.scalar(
+        select(func.count(Device.id)).where(
+            Device.org_id == org.id,
+            Device.is_active.is_(True),
         )
-        or 0
-    )
-    active_devices = (
-        await db.scalar(
-            select(func.count(Device.id)).where(
-                Device.org_id == org.id,
-                Device.is_active.is_(True),
-            )
-        )
-        or 0
-    )
-    pending_enrollments = (
-        await db.scalar(
-            select(func.count(User.id)).where(
-                User.org_id == org.id,
-                User.is_active.is_(True),
-                User.enrolled_at.is_(None),
-            )
-        )
-        or 0
-    )
-    status_rows = (
-        await db.execute(
-            select(
-                AttendanceLog.status,
-                func.count(func.distinct(AttendanceLog.user_id)),
-            )
-            .where(
-                AttendanceLog.org_id == org.id,
-                AttendanceLog.type == "check_in",
-                AttendanceLog.ts >= day_start,
-                AttendanceLog.ts < day_end,
-            )
-            .group_by(AttendanceLog.status)
-        )
-    ).all()
-    status_counts = {row[0]: int(row[1]) for row in status_rows}
-    checked_out = (
-        await db.scalar(
-            select(func.count(func.distinct(AttendanceLog.user_id))).where(
-                AttendanceLog.org_id == org.id,
-                AttendanceLog.type == "check_out",
-                AttendanceLog.ts >= day_start,
-                AttendanceLog.ts < day_end,
-            )
-        )
-        or 0
-    )
-    local_timestamp = func.timezone(org.timezone, AttendanceLog.ts)
-    average_rows = (
-        await db.execute(
-            select(
-                AttendanceLog.type,
-                func.avg(
-                    func.extract("hour", local_timestamp) * 60
-                    + func.extract("minute", local_timestamp)
-                ),
-            )
-            .where(
-                AttendanceLog.org_id == org.id,
-                AttendanceLog.ts >= day_start,
-                AttendanceLog.ts < day_end,
-                AttendanceLog.status.in_(["on_time", "late", "early"]),
-            )
-            .group_by(AttendanceLog.type)
-        )
-    ).all()
-    average_times = {
-        attendance_type: format_average_minutes(average_minutes)
-        for attendance_type, average_minutes in average_rows
+    ) or 0
+    scoped_user_ids = {
+        user.id for user, _ in await schedule_rows(db, org, today, scope_ids)
     }
+    pending_conditions = [
+        User.org_id == org.id,
+        User.is_active.is_(True),
+        User.enrolled_at.is_(None),
+    ]
+    if scope_ids is not None:
+        pending_conditions.append(User.id.in_(scoped_user_ids))
+    pending_enrollments = await db.scalar(
+        select(func.count(User.id)).where(*pending_conditions)
+    ) or 0
     recent_rows = (
         await db.execute(
             select(
-                AttendanceLog.id,
-                AttendanceLog.ts,
-                AttendanceLog.type,
-                AttendanceLog.status,
-                AttendanceLog.confidence_score,
-                User.id.label("user_id"),
+                AttendanceLog,
                 User.name.label("user_name"),
-                Device.id.label("device_id"),
                 Device.name.label("device_name"),
             )
             .outerjoin(User, AttendanceLog.user_id == User.id)
             .outerjoin(Device, AttendanceLog.device_id == Device.id)
-            .where(AttendanceLog.org_id == org.id)
+            .where(
+                AttendanceLog.org_id == org.id,
+                effective_attendance_condition(),
+                *log_scope_conditions(scope_ids),
+            )
             .order_by(AttendanceLog.ts.desc())
             .limit(10)
         )
     ).all()
-    recent_activity = [
-        RecentActivity(
-            id=row.id,
-            timestamp=row.ts,
-            type=row.type,
-            status=row.status,
-            confidence_score=row.confidence_score,
-            user_id=row.user_id,
-            user_name=row.user_name,
-            device_id=row.device_id,
-            device_name=row.device_name,
-        )
-        for row in recent_rows
+    check_in_logs = [
+        log for log in logs if log.type == "check_in" and log.status in {"on_time", "late"}
     ]
-    on_time = status_counts.get("on_time", 0)
-    late = status_counts.get("late", 0)
-    checked_in = on_time + late
+    check_out_logs = [
+        log
+        for log in logs
+        if log.type == "check_out" and log.status in {"on_time", "early_departure"}
+    ]
     return DashboardStats(
         today=DashboardToday(
             date=today,
-            total_employees=total_users,
-            checked_in=checked_in,
-            checked_out=checked_out,
-            on_time=on_time,
-            late_arrivals=late,
-            absent=max(0, total_users - checked_in),
-            average_check_in_time=average_times.get("check_in"),
-            average_check_out_time=average_times.get("check_out"),
+            total_employees=summary.total_users,
+            checked_in=summary.check_ins,
+            checked_out=summary.check_outs,
+            on_time=summary.on_time,
+            late_arrivals=summary.late,
+            absent=summary.absent,
+            average_check_in_time=average_local_time(check_in_logs, org.timezone),
+            average_check_out_time=average_local_time(check_out_logs, org.timezone),
         ),
-        total_users=total_users,
+        total_users=summary.total_users,
         active_devices=active_devices,
         pending_enrollments=pending_enrollments,
-        recent_activity=recent_activity,
+        recent_activity=[
+            RecentActivity(
+                id=row[0].id,
+                timestamp=row[0].ts,
+                type=row[0].type,
+                status=row[0].status,
+                confidence_score=row[0].confidence_score,
+                user_id=row[0].user_id,
+                user_name=row[1],
+                device_id=row[0].device_id,
+                device_name=row[2],
+            )
+            for row in recent_rows
+        ],
     )
 
 
@@ -283,68 +266,53 @@ async def get_user_stats(
 ) -> UserAttendanceStats:
     org = await load_org(db, current_user.org_id)
     user = await load_user(db, org.id, user_id)
-    local_today = local_day_bounds(org.timezone)[0]
-    effective_to = to_date or local_today
+    await ensure_user_in_scope(db, current_user, user)
+    effective_to = to_date or local_day_bounds(org.timezone)[0]
     effective_from = from_date or effective_to - timedelta(days=29)
     validate_range(effective_from, effective_to)
-    range_start, _ = local_date_bounds(org.timezone, effective_from)
-    _, range_end = local_date_bounds(org.timezone, effective_to)
-    conditions = (
-        AttendanceLog.org_id == org.id,
-        AttendanceLog.user_id == user.id,
-        AttendanceLog.type == "check_in",
-        AttendanceLog.ts >= range_start,
-        AttendanceLog.ts < range_end,
-    )
-    rows = (
-        await db.execute(
-            select(AttendanceLog.status, func.count(AttendanceLog.id))
-            .where(*conditions)
-            .group_by(AttendanceLog.status)
+    scope_ids = await operator_scope_ids(db, current_user)
+    scheduled_days = 0
+    for day in days_in_range(effective_from, effective_to):
+        rows = await schedule_rows(db, org, day, scope_ids)
+        scheduled_days += any(
+            row_user.id == user.id and schedule.scheduled for row_user, schedule in rows
         )
-    ).all()
-    counts = {row[0]: int(row[1]) for row in rows}
-    on_time = counts.get("on_time", 0)
-    late = counts.get("late", 0)
-    total_check_ins = on_time + late
-    working_days = working_day_count(effective_from, effective_to)
-    local_timestamp = func.timezone(org.timezone, AttendanceLog.ts)
-    average_minutes = await db.scalar(
-        select(
-            func.avg(
-                func.extract("hour", local_timestamp) * 60 + func.extract("minute", local_timestamp)
-            )
-        ).where(
-            *conditions,
-            AttendanceLog.status.in_(["on_time", "late"]),
-        )
+    logs = await effective_logs(
+        db,
+        org.id,
+        effective_from,
+        effective_to,
+        scope_ids,
+        user_id=user.id,
     )
-    average_check_in_time = format_average_minutes(average_minutes)
+    check_ins = [
+        log for log in logs if log.type == "check_in" and log.status in {"on_time", "late"}
+    ]
+    on_time = sum(log.status == "on_time" for log in check_ins)
+    late = sum(log.status == "late" for log in check_ins)
+    present_days = len({log.schedule_date for log in check_ins})
     return UserAttendanceStats(
         user_id=user.id,
         user_name=user.name,
         period=ReportPeriod(
             from_date=effective_from,
             to_date=effective_to,
-            working_days=working_days,
+            working_days=scheduled_days,
         ),
         summary=AttendanceCounts(
             on_time=on_time,
             late=late,
-            absent=max(0, working_days - total_check_ins),
-            total_check_ins=total_check_ins,
+            absent=max(0, scheduled_days - present_days),
+            total_check_ins=len(check_ins),
         ),
         rates=AttendanceRates(
             attendance_rate=round(
-                total_check_ins / working_days * 100 if working_days else 0,
+                present_days / scheduled_days * 100 if scheduled_days else 0,
                 2,
             ),
-            punctuality_rate=round(
-                on_time / total_check_ins * 100 if total_check_ins else 0,
-                2,
-            ),
+            punctuality_rate=round(on_time / len(check_ins) * 100 if check_ins else 0, 2),
         ),
-        average_check_in_time=average_check_in_time,
+        average_check_in_time=average_local_time(check_ins, org.timezone),
     )
 
 
@@ -357,20 +325,15 @@ async def get_daily_summaries(
 ) -> list[ReportDailySummary]:
     validate_range(from_date, to_date)
     org = await load_org(db, current_user.org_id)
-    total_users = (
-        await db.scalar(
-            select(func.count(User.id)).where(
-                User.org_id == org.id,
-                User.is_active.is_(True),
-            )
-        )
-        or 0
-    )
-    counts_by_day = await grouped_daily_counts(db, org, from_date, to_date)
+    scope_ids = await operator_scope_ids(db, current_user)
+    logs = await effective_logs(db, org.id, from_date, to_date, scope_ids)
+    logs_by_day: dict[date, list[AttendanceLog]] = defaultdict(list)
+    for log in logs:
+        if log.schedule_date is not None:
+            logs_by_day[log.schedule_date].append(log)
     return [
-        report_daily_summary(day, total_users, counts_by_day.get(day, {}))
-        for day_offset in range((to_date - from_date).days + 1)
-        for day in [from_date + timedelta(days=day_offset)]
+        await daily_summary(db, org, day, scope_ids, logs_by_day[day])
+        for day in days_in_range(from_date, to_date)
     ]
 
 
@@ -391,31 +354,37 @@ async def export_report(
     del format
     validate_range(from_date, to_date)
     org = await load_org(db, current_user.org_id)
-    range_start, _ = local_date_bounds(org.timezone, from_date)
-    _, range_end = local_date_bounds(org.timezone, to_date)
-    query = (
-        select(
-            AttendanceLog.id,
-            User.name,
-            User.email,
-            User.external_id,
-            User.department,
-            AttendanceLog.ts,
-            AttendanceLog.type,
-            AttendanceLog.status,
-            AttendanceLog.confidence_score,
-        )
-        .outerjoin(User, AttendanceLog.user_id == User.id)
-        .where(
-            AttendanceLog.org_id == org.id,
-            AttendanceLog.ts >= range_start,
-            AttendanceLog.ts < range_end,
-        )
-        .order_by(AttendanceLog.ts.desc())
-    )
+    scope_ids = await operator_scope_ids(db, current_user)
     if user_id is not None:
-        query = query.where(AttendanceLog.user_id == user_id)
-    rows = (await db.execute(query)).all()
+        target = await load_user(db, org.id, user_id)
+        await ensure_user_in_scope(db, current_user, target)
+    conditions = [
+        AttendanceLog.org_id == org.id,
+        AttendanceLog.schedule_date >= from_date,
+        AttendanceLog.schedule_date <= to_date,
+        effective_attendance_condition(),
+        *log_scope_conditions(scope_ids),
+    ]
+    if user_id is not None:
+        conditions.append(AttendanceLog.user_id == user_id)
+    rows = (
+        await db.execute(
+            select(
+                AttendanceLog,
+                User.name.label("user_name"),
+                User.email,
+                User.external_id,
+                OrganizationalUnit.name.label("unit_name"),
+                OrganizationalUnit.kind.label("unit_kind"),
+                Shift.name.label("shift_name"),
+            )
+            .outerjoin(User, AttendanceLog.user_id == User.id)
+            .outerjoin(OrganizationalUnit, AttendanceLog.unit_id == OrganizationalUnit.id)
+            .outerjoin(Shift, AttendanceLog.shift_id == Shift.id)
+            .where(*conditions)
+            .order_by(AttendanceLog.schedule_date.desc(), AttendanceLog.ts.desc())
+        )
+    ).all()
     output = io.StringIO(newline="")
     writer = csv.writer(output)
     writer.writerow(
@@ -424,25 +393,38 @@ async def export_report(
             "Name",
             "Email",
             "External ID",
-            "Department",
-            "Timestamp",
+            "Unit",
+            "Unit Kind",
+            "Shift",
+            "Schedule Date",
+            "Event Time",
             "Type",
             "Status",
+            "Source",
             "Confidence",
+            "Correction Reason",
+            "Supersedes ID",
         ]
     )
     for row in rows:
+        log = row[0]
         writer.writerow(
             [
-                safe_csv_cell(row.id),
-                safe_csv_cell(row.name),
+                safe_csv_cell(log.id),
+                safe_csv_cell(row.user_name),
                 safe_csv_cell(row.email),
                 safe_csv_cell(row.external_id),
-                safe_csv_cell(row.department),
-                row.ts.isoformat(),
-                row.type,
-                row.status,
-                "" if row.confidence_score is None else f"{row.confidence_score:.4f}",
+                safe_csv_cell(row.unit_name),
+                safe_csv_cell(row.unit_kind),
+                safe_csv_cell(row.shift_name),
+                log.schedule_date,
+                log.ts.isoformat(),
+                log.type,
+                log.status,
+                log.source,
+                "" if log.confidence_score is None else f"{log.confidence_score:.4f}",
+                safe_csv_cell(log.correction_reason),
+                safe_csv_cell(log.supersedes_id),
             ]
         )
     filename = f"attendance_{from_date}_{to_date}.csv"
@@ -459,79 +441,100 @@ async def get_weekly_trend(
     current_user: Annotated[User, Depends(require_operator)],
 ) -> list[WeeklyTrendPoint]:
     org = await load_org(db, current_user.org_id)
+    scope_ids = await operator_scope_ids(db, current_user)
     today = local_day_bounds(org.timezone)[0]
     from_date = today - timedelta(days=6)
-    range_start, _ = local_date_bounds(org.timezone, from_date)
-    _, range_end = local_date_bounds(org.timezone, today)
-    local_date = local_date_expression(org.timezone).label("local_date")
-    rows = (
-        await db.execute(
-            select(
-                local_date,
-                AttendanceLog.type,
-                func.count(func.distinct(AttendanceLog.user_id)),
-            )
-            .where(
-                AttendanceLog.org_id == org.id,
-                AttendanceLog.ts >= range_start,
-                AttendanceLog.ts < range_end,
-                AttendanceLog.status != "unknown_user",
-            )
-            .group_by(local_date, AttendanceLog.type)
-        )
-    ).all()
-    counts = {(row[0], row[1]): int(row[2]) for row in rows}
+    logs = await effective_logs(db, org.id, from_date, today, scope_ids)
     return [
         WeeklyTrendPoint(
             date=day,
-            check_ins=counts.get((day, "check_in"), 0),
-            check_outs=counts.get((day, "check_out"), 0),
+            check_ins=len(
+                {
+                    log.user_id
+                    for log in logs
+                    if log.schedule_date == day
+                    and log.type == "check_in"
+                    and log.user_id is not None
+                }
+            ),
+            check_outs=len(
+                {
+                    log.user_id
+                    for log in logs
+                    if log.schedule_date == day
+                    and log.type == "check_out"
+                    and log.user_id is not None
+                }
+            ),
         )
-        for offset in range(7)
-        for day in [from_date + timedelta(days=offset)]
+        for day in days_in_range(from_date, today)
     ]
 
 
-@router.get("/department-summary", response_model=list[DepartmentSummary])
-async def get_department_summary(
+@router.get("/unit-summary", response_model=list[UnitReportSummary])
+async def get_unit_summary(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(require_operator)],
-    target_date: Annotated[date | None, Query()] = None,
-) -> list[DepartmentSummary]:
+    from_date: Annotated[date | None, Query()] = None,
+    to_date: Annotated[date | None, Query()] = None,
+) -> list[UnitReportSummary]:
     org = await load_org(db, current_user.org_id)
-    local_today, today_start, today_end = local_day_bounds(org.timezone)
-    if target_date is None:
-        day_start, day_end = today_start, today_end
-    else:
-        day_start, day_end = local_date_bounds(org.timezone, target_date)
-    department_rows = (
-        await db.execute(
-            select(User.department, func.count(User.id))
-            .where(User.org_id == org.id, User.is_active.is_(True))
-            .group_by(User.department)
-        )
-    ).all()
-    department_counts = {row[0] or "Unassigned": int(row[1]) for row in department_rows}
-    present_rows = (
-        await db.execute(
-            select(User.department, func.count(func.distinct(AttendanceLog.user_id)))
-            .join(AttendanceLog, AttendanceLog.user_id == User.id)
-            .where(
-                AttendanceLog.org_id == org.id,
-                AttendanceLog.type == "check_in",
-                AttendanceLog.status.in_(["on_time", "late"]),
-                AttendanceLog.ts >= day_start,
-                AttendanceLog.ts < day_end,
+    end = to_date or local_day_bounds(org.timezone)[0]
+    start = from_date or end
+    validate_range(start, end)
+    scope_ids = await operator_scope_ids(db, current_user)
+    unit_conditions = [OrganizationalUnit.org_id == org.id]
+    if scope_ids is not None:
+        unit_conditions.append(OrganizationalUnit.id.in_(scope_ids))
+    units = list(
+        (
+            await db.scalars(
+                select(OrganizationalUnit)
+                .where(*unit_conditions)
+                .order_by(OrganizationalUnit.name)
             )
-            .group_by(User.department)
-        )
-    ).all()
-    present_counts = {row[0] or "Unassigned": int(row[1]) for row in present_rows}
+        ).all()
+    )
+    scheduled: dict[UUID, int] = defaultdict(int)
+    for day in days_in_range(start, end):
+        for _, schedule in await schedule_rows(db, org, day, scope_ids):
+            if schedule.scheduled and schedule.unit_id is not None:
+                scheduled[schedule.unit_id] += 1
+    logs = await effective_logs(db, org.id, start, end, scope_ids)
+    present: dict[UUID, int] = defaultdict(int)
+    on_time: dict[UUID, int] = defaultdict(int)
+    late: dict[UUID, int] = defaultdict(int)
+    seen: set[tuple[UUID, UUID | None, date | None]] = set()
+    for log in logs:
+        unit_id = log.unit_id
+        if (
+            log.type != "check_in"
+            or unit_id is None
+            or log.status not in {"on_time", "late"}
+        ):
+            continue
+        key = (unit_id, log.user_id, log.schedule_date)
+        if key in seen:
+            continue
+        seen.add(key)
+        present[unit_id] += 1
+        if log.status == "on_time":
+            on_time[unit_id] += 1
+        else:
+            late[unit_id] += 1
     return [
-        DepartmentSummary(
-            department=department,
-            present=present_counts.get(department, 0),
-            absent=max(0, total - present_counts.get(department, 0)),
+        UnitReportSummary(
+            unit=UnitSummary.model_validate(unit),
+            scheduled_person_days=scheduled[unit.id],
+            present_person_days=present[unit.id],
+            absent_person_days=max(0, scheduled[unit.id] - present[unit.id]),
+            on_time=on_time[unit.id],
+            late=late[unit.id],
+            attendance_rate=round(
+                present[unit.id] / scheduled[unit.id] * 100 if scheduled[unit.id] else 0,
+                2,
+            ),
         )
-        for department, total in sorted(department_counts.items())
+        for unit in units
+        if scheduled[unit.id] or present[unit.id]
     ]

@@ -56,12 +56,20 @@ describe('API client', () => {
 
   it('serializes concurrent refreshes and retries each request once', async () => {
     useAuthStore.setState({
-      tokens: {
-        access_token: 'expired-access',
-        refresh_token: 'valid-refresh',
-        token_type: 'bearer',
+      session: {
+        kind: 'user',
+        user: {
+          id: 'user-id',
+          org_id: 'org-id',
+          name: 'Admin',
+          role: 'admin',
+        },
+        tokens: {
+          access_token: 'expired-access',
+          refresh_token: 'valid-refresh',
+          token_type: 'bearer',
+        },
       },
-      isAuthenticated: true,
     });
     let refreshCount = 0;
     let protectedCount = 0;
@@ -99,6 +107,7 @@ describe('API client', () => {
     expect(results.map((result) => result.data)).toEqual([{ ok: true }, { ok: true }]);
     expect(refreshCount).toBe(1);
     expect(protectedCount).toBe(4);
-    expect(useAuthStore.getState().tokens?.access_token).toBe('fresh-access');
+    const session = useAuthStore.getState().session;
+    expect(session?.kind === 'user' ? session.tokens.access_token : null).toBe('fresh-access');
   });
 });

@@ -1,10 +1,13 @@
 import api from './api';
 import type {
   AttendanceListParams,
+  AttendanceCorrectionRequest,
   AttendanceLog,
   CheckType,
+  DailyAttendance,
   ReportDailySummary,
   UserAttendanceStats,
+  UnitAttendanceSummary,
 } from '@/types/attendance';
 
 const REPORTS_BASE = '/reports';
@@ -24,10 +27,18 @@ interface BackendAttendanceLog {
   user_name: string | null;
   device_id: string | null;
   device_name: string | null;
-  ts: string;
+  unit_id?: string | null;
+  unit_name?: string | null;
+  shift_id?: string | null;
+  shift_name?: string | null;
+  schedule_date?: string | null;
+  event_time: string;
   type: CheckType;
   status: string;
+  source?: 'face' | 'manual';
   confidence_score: number | null;
+  supersedes_id?: string | null;
+  correction_reason?: string | null;
 }
 
 interface BackendAttendanceListResponse {
@@ -91,17 +102,26 @@ function transformAttendanceLog(log: BackendAttendanceLog): AttendanceLog {
     user_id: log.user_id ?? '',
     user_name: log.user_name ?? 'Unknown',
     check_type: log.type,
-    timestamp: log.ts,
+    timestamp: log.event_time,
+    schedule_date: log.schedule_date ?? null,
+    status: log.status,
+    source: log.source ?? 'face',
+    unit_id: log.unit_id ?? '',
+    unit_name: log.unit_name ?? '',
+    shift_id: log.shift_id ?? '',
+    shift_name: log.shift_name ?? '',
     device_id: log.device_id ?? '',
     device_name: log.device_name ?? '',
     confidence: log.confidence_score ?? 0,
+    supersedes_id: log.supersedes_id ?? null,
+    correction_reason: log.correction_reason ?? null,
   };
 }
 
 function transformRecentActivity(activity: BackendRecentActivity): AttendanceLog {
   return transformAttendanceLog({
     ...activity,
-    ts: activity.timestamp,
+    event_time: activity.timestamp,
   });
 }
 
@@ -128,6 +148,30 @@ export const reportsApi = {
     };
   },
 
+  async correctAttendance(
+    logId: string,
+    payload: AttendanceCorrectionRequest
+  ): Promise<AttendanceLog> {
+    const response = await api.post<BackendAttendanceLog>(
+      `${ATTENDANCE_BASE}/${logId}/corrections`,
+      payload
+    );
+    return transformAttendanceLog(response.data);
+  },
+
+
+  async getDailyAttendance(
+    date: string,
+    unitId?: string,
+    shiftId?: string,
+    signal?: AbortSignal
+  ): Promise<DailyAttendance> {
+    const response = await api.get<DailyAttendance>(`${ATTENDANCE_BASE}/daily`, {
+      params: { date, unit_id: unitId, shift_id: shiftId },
+      signal,
+    });
+    return response.data;
+  },
   async getUserStats(userId: string, signal?: AbortSignal): Promise<UserAttendanceStats> {
     const response = await api.get<UserAttendanceStats>(`${REPORTS_BASE}/users/${userId}/stats`, {
       signal,
@@ -165,13 +209,15 @@ export const reportsApi = {
     return response.data;
   },
 
-  async getDepartmentSummary(
+  async getUnitSummary(
+    fromDate: string,
+    toDate: string,
     signal?: AbortSignal
-  ): Promise<{ department: string; present: number; absent: number }[]> {
-    const response = await api.get<{ department: string; present: number; absent: number }[]>(
-      `${REPORTS_BASE}/department-summary`,
-      { signal }
-    );
+  ): Promise<UnitAttendanceSummary[]> {
+    const response = await api.get<UnitAttendanceSummary[]>(`${REPORTS_BASE}/unit-summary`, {
+      params: { from_date: fromDate, to_date: toDate },
+      signal,
+    });
     return response.data;
   },
 };

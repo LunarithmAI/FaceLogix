@@ -30,16 +30,20 @@ export function ReportsPage() {
   const reportsQuery = useQuery({
     queryKey: queryKeys.reports(appliedRange),
     queryFn: async ({ signal }) => {
-      const [dailySummaries, weeklyTrend, departmentSummary] = await Promise.all([
+      const [dailySummaries, weeklyTrend, unitSummary] = await Promise.all([
         reportsApi.getDailySummaries(
           appliedRange.from_date,
           appliedRange.to_date,
           signal
         ),
         reportsApi.getWeeklyTrend(signal),
-        reportsApi.getDepartmentSummary(signal),
+        reportsApi.getUnitSummary(
+          appliedRange.from_date,
+          appliedRange.to_date,
+          signal
+        ),
       ]);
-      return { dailySummaries, weeklyTrend, departmentSummary };
+      return { dailySummaries, weeklyTrend, unitSummary };
     },
   });
   const exportMutation = useMutation({
@@ -62,7 +66,7 @@ export function ReportsPage() {
   const {
     dailySummaries = [],
     weeklyTrend = [],
-    departmentSummary = [],
+    unitSummary = [],
   } = reportsQuery.data ?? {};
 
   // Calculate summary stats
@@ -266,50 +270,34 @@ export function ReportsPage() {
         </div>
       </Card>
 
-      {/* Department Summary */}
+      {/* Unit Summary */}
       <Card>
         <div className="p-4">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">{t('Department Attendance Summary')}</h2>
-          {departmentSummary.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">{t('No department data available')}</p>
+          <h2 className="mb-4 text-lg font-semibold text-gray-900">{t('Unit Attendance Summary')}</h2>
+          {unitSummary.length === 0 ? (
+            <p className="py-8 text-center text-gray-500">{t('No unit data available')}</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-gray-200">
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">{t('Department')}</th>
-                    <th className="text-right py-3 px-4 font-medium text-gray-600">{t('Present')}</th>
-                    <th className="text-right py-3 px-4 font-medium text-gray-600">{t('Absent')}</th>
-                    <th className="text-right py-3 px-4 font-medium text-gray-600">{t('Rate')}</th>
+                    <th className="px-4 py-3 text-left font-medium text-gray-600">{t('Unit')}</th>
+                    <th className="px-4 py-3 text-right font-medium text-gray-600">{t('Scheduled')}</th>
+                    <th className="px-4 py-3 text-right font-medium text-gray-600">{t('Present')}</th>
+                    <th className="px-4 py-3 text-right font-medium text-gray-600">{t('Absent')}</th>
+                    <th className="px-4 py-3 text-right font-medium text-gray-600">{t('Rate')}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {departmentSummary.map((dept) => {
-                    const total = dept.present + dept.absent;
-                    const rate = total > 0 ? Math.round((dept.present / total) * 100) : 0;
-                    return (
-                      <tr key={dept.department} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="py-3 px-4 text-gray-900 font-medium">
-                          {dept.department || t('Unassigned')}
-                        </td>
-                        <td className="py-3 px-4 text-right text-green-600 font-medium">
-                          {dept.present}
-                        </td>
-                        <td className="py-3 px-4 text-right text-red-600 font-medium">
-                          {dept.absent}
-                        </td>
-                        <td className="py-3 px-4 text-right">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            rate >= 90 ? 'bg-green-100 text-green-800' :
-                            rate >= 70 ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-red-100 text-red-800'
-                          }`}>
-                            {rate}%
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {unitSummary.map((summary) => (
+                    <tr key={summary.unit.id} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-4 py-3 font-medium text-gray-900">{summary.unit.name}</td>
+                      <td className="px-4 py-3 text-right text-gray-700">{summary.scheduled_person_days}</td>
+                      <td className="px-4 py-3 text-right font-medium text-green-700">{summary.present_person_days}</td>
+                      <td className="px-4 py-3 text-right font-medium text-red-700">{summary.absent_person_days}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-gray-900">{Math.round(summary.attendance_rate)}%</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>

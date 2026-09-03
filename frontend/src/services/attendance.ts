@@ -16,6 +16,7 @@ function transformCheckInResponse(
   } else {
     switch (response.status) {
       case 'unknown_user':
+      case 'ambiguous_face':
         status = 'not_recognized';
         break;
       case 'invalid_image':
@@ -38,26 +39,22 @@ function transformCheckInResponse(
     message: response.message,
     user_name: response.user_name,
     check_type: checkType,
-    timestamp: response.check_in_time,
+    timestamp: response.event_time,
     confidence: response.confidence_score,
   };
 }
 
 export const attendanceApi = {
-  async checkIn(imageData: string, deviceId?: string): Promise<CheckInResult> {
+  async checkIn(imageData: string): Promise<CheckInResult> {
     const response = await api.post<BackendCheckInResponse>('/attendance/check-in', {
       image: imageData,
-      device_id: deviceId,
-      timestamp: new Date().toISOString(),
     });
     return transformCheckInResponse(response.data, 'check_in');
   },
 
-  async checkOut(imageData: string, deviceId?: string): Promise<CheckInResult> {
+  async checkOut(imageData: string): Promise<CheckInResult> {
     const response = await api.post<BackendCheckInResponse>('/attendance/check-out', {
       image: imageData,
-      device_id: deviceId,
-      timestamp: new Date().toISOString(),
     });
     return transformCheckInResponse(response.data, 'check_out');
   },

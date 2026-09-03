@@ -21,9 +21,14 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
+from app.core.time import local_day_bounds
 from app.models.device import Device
 from app.models.org import Org
+from app.models.organizational_unit import ManagerUnitScope, OrganizationalUnit
 from app.models.refresh_token import RefreshToken
+from app.models.shift import Shift
+from app.models.shift_assignment import UserShiftAssignment
+from app.models.unit_assignment import UserUnitAssignment
 from app.models.user import User
 from app.schemas.auth import (
     ChangePasswordRequest,
@@ -36,6 +41,9 @@ from app.schemas.auth import (
     RefreshResponse,
     UserProfileResponse,
 )
+from app.schemas.device import canonical_device_settings
+from app.schemas.shift import ShiftSummary
+from app.schemas.unit import UnitSummary
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -188,19 +196,55 @@ async def logout(
 @router.get("/me", response_model=UserProfileResponse)
 async def get_current_user_profile(
     current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> UserProfileResponse:
-    """
-    Get the current authenticated user's profile.
-
-    Returns user information based on the JWT token.
-    """
+    timezone_name = await db.scalar(
+        select(Org.timezone).where(Org.id == current_user.org_id)
+    )
+    if timezone_name is None:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    today = local_day_bounds(timezone_name)[0]
+    unit = await db.scalar(
+        select(OrganizationalUnit)
+        .join(UserUnitAssignment, UserUnitAssignment.unit_id == OrganizationalUnit.id)
+        .where(
+            UserUnitAssignment.user_id == current_user.id,
+            UserUnitAssignment.effective_from <= today,
+            (
+                UserUnitAssignment.effective_to.is_(None)
+                | (UserUnitAssignment.effective_to >= today)
+            ),
+        )
+    )
+    shift = await db.scalar(
+        select(Shift)
+        .join(UserShiftAssignment, UserShiftAssignment.shift_id == Shift.id)
+        .where(
+            UserShiftAssignment.user_id == current_user.id,
+            UserShiftAssignment.effective_from <= today,
+            (
+                UserShiftAssignment.effective_to.is_(None)
+                | (UserShiftAssignment.effective_to >= today)
+            ),
+        )
+    )
+    managed_units = (
+        await db.scalars(
+            select(OrganizationalUnit)
+            .join(ManagerUnitScope, ManagerUnitScope.unit_id == OrganizationalUnit.id)
+            .where(ManagerUnitScope.manager_id == current_user.id)
+            .order_by(OrganizationalUnit.name)
+        )
+    ).all()
     return UserProfileResponse(
         id=current_user.id,
         org_id=current_user.org_id,
         email=current_user.email,
         name=current_user.name,
         role=current_user.role,
-        department=current_user.department,
+        current_unit=UnitSummary.model_validate(unit) if unit is not None else None,
+        current_shift=ShiftSummary.model_validate(shift) if shift is not None else None,
+        managed_units=[UnitSummary.model_validate(item) for item in managed_units],
         is_active=current_user.is_active,
         enrolled_at=current_user.enrolled_at,
         created_at=current_user.created_at,
@@ -278,6 +322,8 @@ async def device_login(
 
     return DeviceLoginResponse(
         device_token=device_token,
+        device_id=device.id,
         org_id=device.org_id,
         device_name=device.name,
+        settings=canonical_device_settings(device.settings),
     )

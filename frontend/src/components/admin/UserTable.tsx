@@ -60,6 +60,9 @@ export function UserTable({
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               {t('Role')}
             </th>
+            <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              {t('Unit / Shift')}
+            </th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               {t('Status')}
             </th>
@@ -94,6 +97,12 @@ export function UserTable({
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
                 <RoleBadge role={user.role} />
+              </td>
+              <td className="px-6 py-4 text-sm text-gray-600">
+                <span className="block font-medium text-gray-900">
+                  {user.current_unit?.name || t('Not assigned')}
+                </span>
+                <span>{user.current_shift?.name || t('No shift')}</span>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
                 <StatusBadge status={user.is_active ? 'active' : 'inactive'} />

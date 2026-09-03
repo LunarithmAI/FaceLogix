@@ -1,8 +1,11 @@
 import { useEffect, useRef } from 'react';
 import { NavLink } from 'react-router';
 import {
+  BuildingOffice2Icon,
+  CalendarDaysIcon,
   ChartBarIcon,
   ClipboardDocumentListIcon,
+  ClockIcon,
   Cog6ToothIcon,
   DeviceTabletIcon,
   HomeIcon,
@@ -10,20 +13,26 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline';
 import { translate as t } from '@/i18n';
+import { useAuthStore } from '@/stores/authStore';
+import { ADMIN_ROLES } from '@/types/roles';
 
 interface NavItem {
   name: string;
   href: string;
   icon: typeof HomeIcon;
+  adminOnly?: boolean;
 }
 
 const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/admin', icon: HomeIcon },
   { name: 'Users', href: '/admin/users', icon: UsersIcon },
-  { name: 'Devices', href: '/admin/devices', icon: DeviceTabletIcon },
+  { name: 'Units', href: '/admin/units', icon: BuildingOffice2Icon },
+  { name: 'Shifts', href: '/admin/shifts', icon: ClockIcon },
+  { name: 'Calendar', href: '/admin/calendar', icon: CalendarDaysIcon },
+  { name: 'Devices', href: '/admin/devices', icon: DeviceTabletIcon, adminOnly: true },
   { name: 'Attendance', href: '/admin/attendance', icon: ClipboardDocumentListIcon },
   { name: 'Reports', href: '/admin/reports', icon: ChartBarIcon },
-  { name: 'Settings', href: '/admin/settings', icon: Cog6ToothIcon },
+  { name: 'Settings', href: '/admin/settings', icon: Cog6ToothIcon, adminOnly: true },
 ];
 
 interface SidebarProps {
@@ -32,13 +41,16 @@ interface SidebarProps {
 }
 
 function NavigationContent({ onNavigate }: { onNavigate?: () => void }) {
+  const session = useAuthStore((state) => state.session);
+  const isAdmin =
+    session?.kind === 'user' && ADMIN_ROLES.includes(session.user.role);
   return (
     <>
       <div className="flex h-16 items-center border-b border-gray-200 px-6">
         <span className="text-xl font-bold text-primary-700">FaceLogix</span>
       </div>
       <nav className="flex-1 space-y-1 overflow-y-auto px-4 py-4" aria-label={t('Administration')}>
-        {navigation.map((item) => (
+        {navigation.filter((item) => !item.adminOnly || isAdmin).map((item) => (
           <NavLink
             key={item.name}
             to={item.href}

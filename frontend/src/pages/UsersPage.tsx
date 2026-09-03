@@ -9,8 +9,11 @@ import { UserTable } from '@/components/admin/UserTable';
 import { UserForm } from '@/components/admin/UserForm';
 import { EnrollmentModal } from '@/components/admin/EnrollmentModal';
 import { UserImportModal } from '@/components/admin/UserImportModal';
+import { UserAssignmentsPanel } from '@/components/admin/UserAssignmentsPanel';
 import { Loading } from '@/components/ui/Loading';
 import { usersApi } from '@/services/users';
+import { shiftsApi } from '@/services/shifts';
+import { unitsApi } from '@/services/units';
 import type { User, CreateUserRequest, UpdateUserRequest } from '@/types/user';
 import { queryClient, queryKeys } from '@/lib/queryClient';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
@@ -19,7 +22,8 @@ import { ADMIN_ROLES } from '@/types/roles';
 import { translate as t } from '@/i18n';
 
 export function UsersPage() {
-  const currentUser = useAuthStore((state) => state.user);
+  const session = useAuthStore((state) => state.session);
+  const currentUser = session?.kind === 'user' ? session.user : null;
   const canManageElevatedUsers =
     currentUser !== null && ADMIN_ROLES.includes(currentUser.role);
   const [search, setSearch] = useState('');
@@ -48,6 +52,14 @@ export function UsersPage() {
         signal
       ),
     placeholderData: keepPreviousData,
+  });
+  const unitsQuery = useQuery({
+    queryKey: ['units', 'active'],
+    queryFn: ({ signal }) => unitsApi.list(false, signal),
+  });
+  const shiftsQuery = useQuery({
+    queryKey: ['shifts', 'active'],
+    queryFn: ({ signal }) => shiftsApi.list(false, signal),
   });
   const saveMutation = useMutation({
     mutationFn: async (input: {
@@ -233,10 +245,21 @@ export function UsersPage() {
         <UserForm
           user={selectedUser || undefined}
           canAssignElevatedRoles={canManageElevatedUsers}
+          units={unitsQuery.data ?? []}
+          shifts={shiftsQuery.data ?? []}
           onSubmit={handleFormSubmit}
           onCancel={() => setIsFormOpen(false)}
           isLoading={isSubmitting}
         />
+        {selectedUser && (
+          <UserAssignmentsPanel
+            user={selectedUser}
+            units={unitsQuery.data ?? []}
+            shifts={shiftsQuery.data ?? []}
+            canManageScopes={canManageElevatedUsers}
+            onUpdated={() => void queryClient.invalidateQueries({ queryKey: ['users'] })}
+          />
+        )}
       </Modal>
 
       {/* Delete Confirmation */}

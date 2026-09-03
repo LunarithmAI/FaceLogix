@@ -4,6 +4,8 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import type { User, CreateUserRequest, UpdateUserRequest } from '@/types/user';
 import type { UserRole } from '@/types/roles';
+import type { ShiftSummary } from '@/types/shift';
+import type { UnitSummary } from '@/types/unit';
 import { translate as t } from '@/i18n';
 
 interface UserFormProps {
@@ -11,6 +13,8 @@ interface UserFormProps {
   onSubmit: (data: CreateUserRequest | UpdateUserRequest) => Promise<void>;
   onCancel: () => void;
   canAssignElevatedRoles: boolean;
+  units?: UnitSummary[];
+  shifts?: ShiftSummary[];
   isLoading?: boolean;
 }
 
@@ -19,6 +23,8 @@ export function UserForm({
   onSubmit,
   onCancel,
   canAssignElevatedRoles,
+  units = [],
+  shifts = [],
   isLoading = false,
 }: UserFormProps) {
   const [formData, setFormData] = useState({
@@ -27,7 +33,8 @@ export function UserForm({
     password: '',
     role: user?.role || 'member' as UserRole,
     external_id: user?.external_id || '',
-    department: user?.department || '',
+    unit_id: user?.current_unit?.id || '',
+    shift_id: user?.current_shift?.id || '',
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -56,7 +63,6 @@ export function UserForm({
         if (formData.name !== user.name) updateData.name = formData.name;
         if (formData.role !== user.role) updateData.role = formData.role;
         if (formData.external_id !== (user.external_id || '')) updateData.external_id = formData.external_id || undefined;
-        if (formData.department !== (user.department || '')) updateData.department = formData.department || undefined;
         await onSubmit(updateData);
       } else {
         // Create
@@ -66,7 +72,8 @@ export function UserForm({
           password: formData.password || undefined,
           role: formData.role,
           external_id: formData.external_id || undefined,
-          department: formData.department || undefined,
+          unit_id: formData.unit_id || undefined,
+          shift_id: formData.shift_id || undefined,
         });
       }
     } catch (error) {
@@ -135,12 +142,42 @@ export function UserForm({
         placeholder="EMP001"
       />
 
-      <Input
-        label={t('Department')}
-        value={formData.department}
-        onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-        placeholder={t('Engineering')}
-      />
+      {!user && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label htmlFor="user-unit" className="mb-1 block text-sm font-medium text-gray-700">
+              {t('Unit')}
+            </label>
+            <select
+              id="user-unit"
+              value={formData.unit_id}
+              onChange={(event) => setFormData({ ...formData, unit_id: event.target.value })}
+              className="block w-full rounded-lg border border-gray-300 bg-white px-4 py-2 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="">{t('Not assigned')}</option>
+              {units.map((unit) => (
+                <option key={unit.id} value={unit.id}>{unit.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="user-shift" className="mb-1 block text-sm font-medium text-gray-700">
+              {t('Shift')}
+            </label>
+            <select
+              id="user-shift"
+              value={formData.shift_id}
+              onChange={(event) => setFormData({ ...formData, shift_id: event.target.value })}
+              className="block w-full rounded-lg border border-gray-300 bg-white px-4 py-2 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="">{t('Not assigned')}</option>
+              {shifts.map((shift) => (
+                <option key={shift.id} value={shift.id}>{shift.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
 
       <div className="flex justify-end gap-3 pt-4">
         <Button type="button" variant="secondary" onClick={onCancel}>

@@ -1,9 +1,15 @@
 import api from './api';
 import type { LoginCredentials, LoginResponse, UserProfile } from '@/types/auth';
+import type { DeviceLoginCredentials, DeviceLoginResponse } from '@/types/device';
 
 export const authApi = {
   login: async (credentials: LoginCredentials): Promise<LoginResponse> => {
     const response = await api.post<LoginResponse>('/auth/login', credentials);
+    return response.data;
+  },
+
+  deviceLogin: async (credentials: DeviceLoginCredentials): Promise<DeviceLoginResponse> => {
+    const response = await api.post<DeviceLoginResponse>('/auth/devices/login', credentials);
     return response.data;
   },
 

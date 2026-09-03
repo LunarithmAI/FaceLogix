@@ -1,5 +1,11 @@
 import api from './api';
-import type { Device, DeviceCredential, DeviceRegistration, DeviceType } from '@/types/device';
+import type {
+  Device,
+  DeviceCredential,
+  DeviceRegistration,
+  DeviceSettings,
+  DeviceType,
+} from '@/types/device';
 
 const DEVICES_BASE = '/devices';
 
@@ -32,6 +38,23 @@ export const devicesApi = {
 
   async update(deviceId: string, data: Partial<DeviceRegistration>): Promise<Device> {
     const response = await api.patch<Device>(`${DEVICES_BASE}/${deviceId}`, data);
+    return response.data;
+  },
+
+  async updateSettings(deviceId: string, settings: Partial<DeviceSettings>): Promise<Device> {
+    const response = await api.patch<Device>(`${DEVICES_BASE}/${deviceId}/settings`, settings);
+    return response.data;
+  },
+
+  async regenerateSecret(deviceId: string): Promise<DeviceCredential> {
+    const response = await api.post<DeviceCredential>(
+      `${DEVICES_BASE}/${deviceId}/regenerate-secret`
+    );
+    return response.data;
+  },
+
+  async heartbeat(): Promise<DeviceSettings> {
+    const response = await api.post<DeviceSettings>(`${DEVICES_BASE}/me/heartbeat`);
     return response.data;
   },
 

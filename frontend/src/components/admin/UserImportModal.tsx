@@ -19,7 +19,7 @@ import { translate as t } from '@/i18n';
 
 const MAX_PACKAGE_BYTES = 128 * 1024 * 1024;
 const CSV_TEMPLATE =
-  'external_id,name,email,department,image_1,image_2,image_3,image_4,image_5\n' +
+  'external_id,name,email,unit,image_1,image_2,image_3,image_4,image_5\n' +
   'EMP-001,Ada Lovelace,ada@example.com,Engineering,images/EMP-001.jpg,,,,\n';
 
 interface UserImportModalProps {
@@ -211,7 +211,7 @@ export function UserImportModal({ isOpen, onClose, onSuccess }: UserImportModalP
                   {t('Package format')}
                 </h3>
                 <p className="mt-1 max-w-2xl text-sm text-gray-600">
-                  {t('Put people.csv at the ZIP root. Each row needs an external ID, name, and image_1 path. Email, department, and image_2 through image_5 are optional. Every imported account is a member.')}
+                  {t('Put people.csv at the ZIP root. Each row needs an external ID, name, and image_1 path. Email, unit, and image_2 through image_5 are optional. Every imported account is a member.')}
                 </p>
               </div>
               <Button

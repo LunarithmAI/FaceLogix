@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Cog6ToothIcon,
   BuildingOfficeIcon,
-  ClockIcon,
   ShieldCheckIcon,
   ServerIcon,
   CheckCircleIcon,
@@ -43,9 +42,10 @@ interface LocalizedMessage {
 
 
 export function SettingsPage() {
-  const { user } = useAuthStore();
+  const session = useAuthStore((state) => state.session);
   const queryClient = useQueryClient();
-  const isAdmin = user !== null && ADMIN_ROLES.includes(user.role);
+  const isAdmin =
+    session?.kind === 'user' && ADMIN_ROLES.includes(session.user.role);
   const [actionError, setActionError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<LocalizedMessage | null>(null);
   const [isFormInitialized, setIsFormInitialized] = useState(false);
@@ -55,9 +55,6 @@ export function SettingsPage() {
     name: '',
     timezone: 'UTC',
     settings: {
-      work_start_time: '09:00',
-      work_end_time: '17:00',
-      late_threshold_minutes: 15,
       require_liveness: true,
       liveness_threshold: 0.8,
       face_match_threshold: 0.75,
@@ -239,47 +236,6 @@ export function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* Work Hours */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ClockIcon className="w-5 h-5 text-gray-500" />
-              {t('Work Hours')}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label={t('Start Time')}
-                  type="time"
-                  value={formData.settings?.work_start_time ?? '09:00'}
-                  onChange={(e) => handleSettingsChange('work_start_time', e.target.value)}
-                  disabled={!isAdmin}
-                />
-                <Input
-                  label={t('End Time')}
-                  type="time"
-                  value={formData.settings?.work_end_time ?? '17:00'}
-                  onChange={(e) => handleSettingsChange('work_end_time', e.target.value)}
-                  disabled={!isAdmin}
-                />
-              </div>
-              <Input
-                label={t('Late Threshold (minutes)')}
-                type="number"
-                min={0}
-                max={120}
-                value={formData.settings?.late_threshold_minutes ?? 15}
-                onChange={(e) => handleSettingsChange('late_threshold_minutes', parseInt(e.target.value))}
-                disabled={!isAdmin}
-              />
-              <p className="text-sm text-gray-500">
-                {t('Employees arriving more than {{minutes}} minutes after start time will be marked as late.', { minutes: formData.settings?.late_threshold_minutes ?? 15 })}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
 
         {/* Security Settings */}
         <Card>

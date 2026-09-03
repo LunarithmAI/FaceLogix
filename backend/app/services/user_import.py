@@ -21,7 +21,7 @@ MAX_IMPORT_ROWS = 100
 CSV_NAME = "people.csv"
 IMAGE_COLUMNS = tuple(f"image_{index}" for index in range(1, 6))
 REQUIRED_COLUMNS = {"external_id", "name", "image_1"}
-ALLOWED_COLUMNS = REQUIRED_COLUMNS | {"email", "department", *IMAGE_COLUMNS[1:]}
+ALLOWED_COLUMNS = REQUIRED_COLUMNS | {"email", "unit", *IMAGE_COLUMNS[1:]}
 _EMAIL_ADAPTER = TypeAdapter(EmailStr)
 
 
@@ -39,7 +39,7 @@ class ParsedImportRow:
     external_id: str
     name: str
     email: str | None
-    department: str | None
+    unit: str | None
     image_paths: tuple[str, ...]
 
 
@@ -144,7 +144,7 @@ def _validate_row(
     external_id = values["external_id"]
     name = values["name"]
     email_value = values.get("email", "")
-    department = values.get("department", "") or None
+    unit = values.get("unit", "") or None
 
     if not external_id:
         errors.append(
@@ -162,11 +162,9 @@ def _validate_row(
         errors.append(
             ImportRowError(row_number, "FIELD_TOO_LONG", "Name exceeds 255 characters", "name")
         )
-    if department is not None and len(department) > 255:
+    if unit is not None and len(unit) > 255:
         errors.append(
-            ImportRowError(
-                row_number, "FIELD_TOO_LONG", "Department exceeds 255 characters", "department"
-            )
+            ImportRowError(row_number, "FIELD_TOO_LONG", "Unit exceeds 255 characters", "unit")
         )
 
     email: str | None = None
@@ -220,7 +218,7 @@ def _validate_row(
             external_id=external_id,
             name=name,
             email=email,
-            department=department,
+            unit=unit,
             image_paths=tuple(image_paths),
         ),
         errors,

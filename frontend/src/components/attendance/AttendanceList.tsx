@@ -5,6 +5,7 @@ import {
 import type { AttendanceLog } from '@/types/attendance';
 import { formatTime, formatShortDate } from '@/utils/date';
 import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
 import { translate as t } from '@/i18n';
 
 interface AttendanceListProps {
@@ -13,6 +14,7 @@ interface AttendanceListProps {
   emptyMessage?: string;
   showUser?: boolean;
   showDevice?: boolean;
+  onCorrect?: (log: AttendanceLog) => void;
 }
 
 export function AttendanceList({
@@ -21,6 +23,7 @@ export function AttendanceList({
   emptyMessage = t('No attendance records found'),
   showUser = true,
   showDevice = true,
+  onCorrect,
 }: AttendanceListProps) {
   if (isLoading) {
     return (
@@ -53,6 +56,12 @@ export function AttendanceList({
                 {t('User')}
               </th>
             )}
+            <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              {t('Unit / Shift')}
+            </th>
+            <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              {t('Status')}
+            </th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               {t('Date')}
             </th>
@@ -67,6 +76,11 @@ export function AttendanceList({
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               {t('Confidence')}
             </th>
+            {onCorrect && (
+              <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                {t('Actions')}
+              </th>
+            )}
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
@@ -94,6 +108,14 @@ export function AttendanceList({
                   </div>
                 </td>
               )}
+              <td className="px-6 py-4 text-sm text-gray-600">
+                <span className="block font-medium text-gray-900">{log.unit_name || t('Unassigned')}</span>
+                <span>{log.shift_name || t('No shift')}</span>
+              </td>
+              <td className="px-6 py-4 text-sm text-gray-600">
+                <span className="block">{t(log.status)}</span>
+                <span className="text-xs uppercase tracking-wide text-gray-400">{t(log.source)}</span>
+              </td>
               <td className="px-6 py-4 whitespace-nowrap">
                 <div className="text-sm text-gray-900">
                   {formatShortDate(log.timestamp)}
@@ -134,6 +156,13 @@ export function AttendanceList({
                   )}
                 </div>
               </td>
+              {onCorrect && (
+                <td className="px-6 py-4 text-right">
+                  <Button type="button" size="sm" variant="secondary" onClick={() => onCorrect(log)}>
+                    {t('Correct')}
+                  </Button>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>

@@ -13,10 +13,11 @@ interface CameraViewProps {
   showGuide?: boolean;
   autoStart?: boolean;
   className?: string;
+  initialFacing?: 'user' | 'environment';
 }
 
 export const CameraView = forwardRef<CameraViewHandle, CameraViewProps>(
-  ({ showGuide = true, autoStart = true, className = '' }, ref) => {
+  ({ showGuide = true, autoStart = true, className = '', initialFacing = 'user' }, ref) => {
     const {
       videoRef,
       isLoading,
@@ -27,7 +28,7 @@ export const CameraView = forwardRef<CameraViewHandle, CameraViewProps>(
       startCamera,
       captureFrame,
       switchCamera,
-    } = useCamera();
+    } = useCamera({ initialFacing });
 
     useImperativeHandle(ref, () => ({ captureFrame }), [captureFrame]);
 

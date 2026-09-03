@@ -1,122 +1,162 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
-import { useLocation, useNavigate } from 'react-router';
+import { useNavigate } from 'react-router';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
-import { useAuthStore } from '@/stores/authStore';
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
+import { useAuthStore } from '@/stores/authStore';
 import { translate as t } from '@/i18n';
+
+type LoginMode = 'user' | 'device';
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const { login, isLoading, error, clearError } = useAuthStore();
+  const { loginUser, loginDevice, isLoading, error, clearError } = useAuthStore();
+  const [mode, setMode] = useState<LoginMode>('user');
   const [organization, setOrganization] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const locationState: unknown = location.state;
-  const returnLocation =
-    typeof locationState === 'object' &&
-    locationState !== null &&
-    'from' in locationState &&
-    typeof locationState.from === 'object' &&
-    locationState.from !== null &&
-    'pathname' in locationState.from &&
-    typeof locationState.from.pathname === 'string'
-      ? locationState.from.pathname
-      : '/';
+  const [deviceId, setDeviceId] = useState('');
+  const [deviceSecret, setDeviceSecret] = useState('');
+  const [showSecret, setShowSecret] = useState(false);
+
+  const selectMode = (nextMode: LoginMode) => {
+    setMode(nextMode);
+    clearError();
+  };
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     clearError();
     try {
-      await login({ organization, email, password });
-      void navigate(returnLocation, { replace: true });
+      if (mode === 'user') {
+        await loginUser({ organization, email, password });
+        void navigate('/admin', { replace: true });
+      } else {
+        await loginDevice({ device_id: deviceId, device_secret: deviceSecret });
+        void navigate('/kiosk', { replace: true });
+      }
     } catch {
-      // The auth store exposes the normalized error below the form heading.
+      // The store exposes the normalized error in the form.
     }
   };
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-primary-700 px-4 py-12">
       <div className="w-full max-w-md">
-        <div className="mb-4 flex justify-end">
-          <LanguageSwitcher compact inverted />
-        </div>
-        <div className="mb-8 text-center">
-          <h1 className="mb-2 text-4xl font-bold text-white">FaceLogix</h1>
-          <p className="text-primary-100">{t('Face Recognition Attendance System')}</p>
+        <div className="mb-8 flex items-center justify-between text-white">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary-200">
+              {t('Attendance operations')}
+            </p>
+            <h1 className="mt-2 text-3xl font-bold">FaceLogix</h1>
+          </div>
+          <LanguageSwitcher />
         </div>
 
-        <Card className="motion-safe:animate-fade-in">
-          <h2 className="mb-6 text-2xl font-semibold text-gray-900">{t('Sign in to your account')}</h2>
-
-          {error !== null && (
-            <div
-              className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"
-              role="alert"
+        <Card className="p-6 sm:p-8">
+          <div className="mb-6 grid grid-cols-2 border-b border-gray-200" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === 'user'}
+              onClick={() => selectMode('user')}
+              className={`border-b-2 px-3 py-3 text-sm font-semibold ${
+                mode === 'user'
+                  ? 'border-primary-600 text-primary-700'
+                  : 'border-transparent text-gray-500 hover:text-gray-800'
+              }`}
             >
+              {t('Staff sign in')}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === 'device'}
+              onClick={() => selectMode('device')}
+              className={`border-b-2 px-3 py-3 text-sm font-semibold ${
+                mode === 'device'
+                  ? 'border-primary-600 text-primary-700'
+                  : 'border-transparent text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              {t('Kiosk sign in')}
+            </button>
+          </div>
+
+          <div className="mb-6">
+            <h2 className="text-xl font-bold text-gray-900">
+              {mode === 'user' ? t('Welcome back') : t('Activate this kiosk')}
+            </h2>
+            <p className="mt-1 text-sm text-gray-600">
+              {mode === 'user'
+                ? t('Use your organization account to continue.')
+                : t('Use the one-time credentials issued by an administrator.')}
+            </p>
+          </div>
+
+          {error && (
+            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
               {t(error)}
             </div>
           )}
 
-          <form onSubmit={(event) => void handleSubmit(event)} className="space-y-5">
-            <Input
-              label={t('Organization')}
-              type="text"
-              value={organization}
-              onChange={(event) => setOrganization(event.target.value)}
-              placeholder="your-workspace"
-              required
-              autoComplete="organization"
-              autoFocus
-            />
-            <Input
-              label={t('Email address')}
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="you@example.com"
-              required
-              autoComplete="email"
-            />
+          <form onSubmit={(event) => void handleSubmit(event)} className="space-y-4">
+            {mode === 'user' ? (
+              <>
+                <Input
+                  label={t('Organization')}
+                  value={organization}
+                  onChange={(event) => setOrganization(event.target.value)}
+                  autoComplete="organization"
+                  required
+                />
+                <Input
+                  label={t('Email')}
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  autoComplete="email"
+                  required
+                />
+              </>
+            ) : (
+              <Input
+                label={t('Device ID')}
+                value={deviceId}
+                onChange={(event) => setDeviceId(event.target.value)}
+                autoComplete="username"
+                required
+              />
+            )}
 
             <div className="relative">
               <Input
-                label={t('Password')}
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                className="pr-12"
-                placeholder={t('Enter your password')}
+                label={mode === 'user' ? t('Password') : t('Device secret')}
+                type={showSecret ? 'text' : 'password'}
+                value={mode === 'user' ? password : deviceSecret}
+                onChange={(event) =>
+                  mode === 'user'
+                    ? setPassword(event.target.value)
+                    : setDeviceSecret(event.target.value)
+                }
+                autoComplete={mode === 'user' ? 'current-password' : 'off'}
                 required
-                autoComplete="current-password"
               />
               <button
                 type="button"
-                onClick={() => setShowPassword((visible) => !visible)}
-                className="absolute bottom-0 right-0 flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-500 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-                aria-label={showPassword ? t('Hide password') : t('Show password')}
+                onClick={() => setShowSecret((visible) => !visible)}
+                className="absolute right-3 top-8 p-1 text-gray-500 hover:text-gray-800"
+                aria-label={showSecret ? t('Hide secret') : t('Show secret')}
               >
-                {showPassword ? (
-                  <EyeSlashIcon className="h-5 w-5" aria-hidden="true" />
-                ) : (
-                  <EyeIcon className="h-5 w-5" aria-hidden="true" />
-                )}
+                {showSecret ? <EyeSlashIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
               </button>
             </div>
 
-            <Button
-              type="submit"
-              className="w-full"
-              size="lg"
-              isLoading={isLoading}
-              loadingText={t('Signing in')}
-            >
-              {t('Sign in')}
+            <Button type="submit" className="w-full" isLoading={isLoading}>
+              {mode === 'user' ? t('Sign in') : t('Open kiosk')}
             </Button>
           </form>
         </Card>

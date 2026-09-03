@@ -158,6 +158,15 @@ if ! compose run --rm --no-deps backend alembic upgrade head; then
 fi
 log "Database migration completed once"
 
+if ! compose run --rm --no-deps backend python scripts/reconcile_legacy_attendance.py; then
+    if [[ -n $OLD_RELEASE ]]; then
+        log "Attendance reconciliation failed; restarting previous application images"
+        activate_application "$OLD_RELEASE" || true
+    fi
+    fail "Attendance reconciliation failed"
+fi
+log "Legacy attendance reconciliation completed"
+
 if ! activate_application "$RELEASE_TAG"; then
     if [[ -n $OLD_RELEASE ]]; then
         log "Candidate failed readiness; restoring application release $OLD_RELEASE without database restore"

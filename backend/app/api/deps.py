@@ -1,15 +1,21 @@
+from datetime import date
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.identity import AuthenticatedIdentity, UserRole
+from app.core.time import local_day_bounds
 from app.models.device import Device
+from app.models.org import Org
+from app.models.organizational_unit import ManagerUnitScope, OrganizationalUnit
+from app.models.unit_assignment import UserUnitAssignment
 from app.models.user import User
 
 security = HTTPBearer()
@@ -113,6 +119,18 @@ async def get_current_user(
     return user
 
 
+async def require_device(
+    identity: Annotated[AuthenticatedIdentity, Depends(get_current_identity)],
+    db: DbSession,
+) -> Device:
+    if identity.kind != "device":
+        raise HTTPException(status_code=403, detail="Device authentication required")
+    device = await db.get(Device, identity.subject_id)
+    if device is None or not device.is_active or device.org_id != identity.org_id:
+        raise unauthorized("Device credential is inactive or stale")
+    return device
+
+
 OPERATOR_ROLES = {UserRole.MANAGER.value, UserRole.ADMIN.value, UserRole.SUPER_ADMIN.value}
 ADMIN_ROLES = {UserRole.ADMIN.value, UserRole.SUPER_ADMIN.value}
 
@@ -151,3 +169,70 @@ def ensure_target_user_mutable(actor: User, target: User) -> None:
         raise HTTPException(status_code=404, detail="User not found")
     if actor.role == UserRole.MANAGER.value and target.role != UserRole.MEMBER.value:
         raise HTTPException(status_code=403, detail="Managers may modify only member users")
+
+
+async def managed_unit_ids(db: AsyncSession, actor: User) -> set[UUID]:
+    if actor.role in ADMIN_ROLES:
+        return set(
+            (
+                await db.scalars(
+                    select(OrganizationalUnit.id).where(
+                        OrganizationalUnit.org_id == actor.org_id
+                    )
+                )
+            ).all()
+        )
+    if actor.role != UserRole.MANAGER.value:
+        return set()
+    return set(
+        (
+            await db.scalars(
+                select(ManagerUnitScope.unit_id)
+                .join(
+                    OrganizationalUnit,
+                    OrganizationalUnit.id == ManagerUnitScope.unit_id,
+                )
+                .where(
+                    ManagerUnitScope.manager_id == actor.id,
+                    OrganizationalUnit.org_id == actor.org_id,
+                )
+            )
+        ).all()
+    )
+
+
+async def ensure_user_in_scope(
+    db: AsyncSession,
+    actor: User,
+    target: User,
+    on_date: date | None = None,
+) -> None:
+    if actor.org_id != target.org_id:
+        raise HTTPException(status_code=404, detail="User not found")
+    if actor.role in ADMIN_ROLES:
+        return
+    if actor.role != UserRole.MANAGER.value:
+        raise HTTPException(status_code=403, detail="Operational access required")
+    effective_date = on_date
+    if effective_date is None:
+        timezone_name = await db.scalar(select(Org.timezone).where(Org.id == actor.org_id))
+        if timezone_name is None:
+            raise HTTPException(status_code=404, detail="Organization not found")
+        effective_date = local_day_bounds(timezone_name)[0]
+    unit_id = await db.scalar(
+        select(UserUnitAssignment.unit_id).where(
+            UserUnitAssignment.org_id == actor.org_id,
+            UserUnitAssignment.user_id == target.id,
+            UserUnitAssignment.effective_from <= effective_date,
+            (
+                UserUnitAssignment.effective_to.is_(None)
+                | (UserUnitAssignment.effective_to >= effective_date)
+            ),
+        )
+    )
+    if unit_id is None or unit_id not in await managed_unit_ids(db, actor):
+        raise HTTPException(status_code=403, detail="User is outside managed unit scope")
+
+
+async def clear_manager_scopes(db: AsyncSession, user: User) -> None:
+    await db.execute(delete(ManagerUnitScope).where(ManagerUnitScope.manager_id == user.id))

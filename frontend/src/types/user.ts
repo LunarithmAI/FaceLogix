@@ -1,5 +1,6 @@
 import type { UserRole } from '@/types/roles';
-
+import type { ShiftSummary } from '@/types/shift';
+import type { UnitSummary } from '@/types/unit';
 
 export interface User {
   id: string;
@@ -10,7 +11,9 @@ export interface User {
   is_active: boolean;
   enrolled_at: string | null;
   external_id?: string;
-  department?: string;
+  current_unit: UnitSummary | null;
+  current_shift: ShiftSummary | null;
+  managed_units: UnitSummary[];
   created_at: string;
   updated_at: string;
 }
@@ -21,7 +24,8 @@ export interface CreateUserRequest {
   password?: string;
   role: UserRole;
   external_id?: string;
-  department?: string;
+  unit_id?: string;
+  shift_id?: string;
 }
 
 export interface UpdateUserRequest {
@@ -30,7 +34,6 @@ export interface UpdateUserRequest {
   role?: UserRole;
   is_active?: boolean;
   external_id?: string;
-  department?: string;
 }
 
 export interface UserListParams {
@@ -38,7 +41,8 @@ export interface UserListParams {
   page_size?: number;
   search?: string;
   is_active?: boolean;
-  department?: string;
+  unit_id?: string;
+  shift_id?: string;
 }
 
 export interface UserListResponse {
@@ -51,7 +55,7 @@ export interface UserListResponse {
 
 export interface EnrollFaceRequest {
   user_id: string;
-  images: string[]; // Base64 encoded images
+  images: string[];
 }
 
 export interface EnrollFaceResponse {
@@ -59,7 +63,6 @@ export interface EnrollFaceResponse {
   embeddings_count: number;
   enrolled_at: string;
 }
-
 
 export type UserImportConflictAction = 'skip' | 'replace';
 
@@ -101,4 +104,24 @@ export interface UserImportResult {
   replaced_count: number;
   skipped_count: number;
   embeddings_count: number;
+}
+
+export interface UnitAssignment {
+  id: string;
+  user_id: string;
+  unit: UnitSummary;
+  effective_from: string;
+  effective_to: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ShiftAssignment {
+  id: string;
+  user_id: string;
+  shift: ShiftSummary;
+  effective_from: string;
+  effective_to: string | null;
+  created_at: string;
+  updated_at: string;
 }

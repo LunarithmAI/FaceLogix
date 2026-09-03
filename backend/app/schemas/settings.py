@@ -1,47 +1,26 @@
-import re
 from datetime import datetime
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-TIME_PATTERN = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
-
 
 class OrgSettingsData(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    work_start_time: str = "09:00"
-    work_end_time: str = "17:00"
-    late_threshold_minutes: int = Field(default=15, ge=0, le=120)
     require_liveness: bool = True
     liveness_threshold: float = Field(default=0.80, ge=0.50, le=0.99)
     face_match_threshold: float = Field(default=0.75, ge=0.30, le=0.95)
 
-    @field_validator("work_start_time", "work_end_time")
-    @classmethod
-    def validate_time(cls, value: str) -> str:
-        if not TIME_PATTERN.fullmatch(value):
-            raise ValueError("time must use HH:MM")
-        return value
 
 
 class OrgSettingsPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    work_start_time: str | None = None
-    work_end_time: str | None = None
-    late_threshold_minutes: int | None = Field(default=None, ge=0, le=120)
     require_liveness: bool | None = None
     liveness_threshold: float | None = Field(default=None, ge=0.50, le=0.99)
     face_match_threshold: float | None = Field(default=None, ge=0.30, le=0.95)
 
-    @field_validator("work_start_time", "work_end_time")
-    @classmethod
-    def validate_time(cls, value: str | None) -> str | None:
-        if value is not None and not TIME_PATTERN.fullmatch(value):
-            raise ValueError("time must use HH:MM")
-        return value
 
 
 class OrgSettingsResponse(BaseModel):

@@ -5,6 +5,8 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.core.identity import UserRole
+from app.schemas.shift import ShiftSummary
+from app.schemas.unit import UnitSummary
 
 
 class UserCreate(BaseModel):
@@ -15,7 +17,8 @@ class UserCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     external_id: str | None = Field(None, max_length=255)
     role: UserRole = UserRole.MEMBER
-    department: str | None = Field(None, max_length=255)
+    unit_id: UUID | None = None
+    shift_id: UUID | None = None
 
 
 class UserUpdate(BaseModel):
@@ -26,7 +29,6 @@ class UserUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=255)
     external_id: str | None = Field(None, max_length=255)
     role: UserRole | None = None
-    department: str | None = Field(None, max_length=255)
     is_active: bool | None = None
 
 
@@ -39,7 +41,9 @@ class UserResponse(BaseModel):
     name: str
     external_id: str | None
     role: UserRole
-    department: str | None
+    current_unit: UnitSummary | None
+    current_shift: ShiftSummary | None
+    managed_units: list[UnitSummary]
     is_active: bool
     enrolled_at: datetime | None
     created_at: datetime
@@ -68,6 +72,13 @@ class ResetPasswordRequest(BaseModel):
     """Schema for password reset request."""
 
     new_password: str = Field(..., min_length=8)
+
+
+class UserActivationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    unit_id: UUID
+    shift_id: UUID | None = None
 
 
 class FaceEnrollmentRequest(BaseModel):

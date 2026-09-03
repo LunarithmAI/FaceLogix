@@ -12,7 +12,10 @@ if TYPE_CHECKING:
     from .attendance_log import AttendanceLog
     from .face_embedding import FaceEmbedding
     from .org import Org
+    from .organizational_unit import ManagerUnitScope
     from .refresh_token import RefreshToken
+    from .shift_assignment import UserShiftAssignment
+    from .unit_assignment import UserUnitAssignment
 
 
 class User(Base, TimestampMixin):
@@ -27,7 +30,9 @@ class User(Base, TimestampMixin):
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(50), default="member", nullable=False)
-    department: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    _legacy_department: Mapped[str | None] = mapped_column(
+        "department", String(255), nullable=True
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     enrolled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -37,10 +42,19 @@ class User(Base, TimestampMixin):
         "FaceEmbedding", back_populates="user", cascade="all, delete-orphan"
     )
     attendance_logs: Mapped[list["AttendanceLog"]] = relationship(
-        "AttendanceLog", back_populates="user"
+        "AttendanceLog", back_populates="user", foreign_keys="AttendanceLog.user_id"
     )
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
         "RefreshToken", back_populates="user", cascade="all, delete-orphan"
+    )
+    managed_unit_scopes: Mapped[list["ManagerUnitScope"]] = relationship(
+        "ManagerUnitScope", back_populates="manager", cascade="all, delete-orphan"
+    )
+    unit_assignments: Mapped[list["UserUnitAssignment"]] = relationship(
+        "UserUnitAssignment", back_populates="user", cascade="all, delete-orphan"
+    )
+    shift_assignments: Mapped[list["UserShiftAssignment"]] = relationship(
+        "UserShiftAssignment", back_populates="user", cascade="all, delete-orphan"
     )
 
     __table_args__ = (

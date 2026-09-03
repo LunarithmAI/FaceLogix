@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CameraViewHandle } from '@/components/camera/CameraView';
 import { useCheckIn } from '@/hooks/useCheckIn';
 import { CheckInPage } from '@/pages/CheckInPage';
+import { devicesApi } from '@/services/devices';
+import { useAuthStore } from '@/stores/authStore';
 
 const cameraState = vi.hoisted(() => ({ frame: null as string | null }));
 vi.mock('@/components/camera/CameraView', async () => {
@@ -17,10 +19,28 @@ vi.mock('@/components/camera/CameraView', async () => {
   };
 });
 vi.mock('@/hooks/useCheckIn', () => ({ useCheckIn: vi.fn() }));
+vi.mock('@/services/devices', () => ({
+  devicesApi: { heartbeat: vi.fn() },
+}));
 
 describe('check-in page states', () => {
   beforeEach(() => {
     cameraState.frame = null;
+    const settings = {
+      allow_check_in: true,
+      allow_check_out: true,
+      default_mode: 'check_in' as const,
+      camera_facing: 'user' as const,
+    };
+    useAuthStore.setState({
+      session: {
+        kind: 'device',
+        device: { id: 'device-id', org_id: 'org-id', name: 'Front desk', settings },
+        access_token: 'device-token',
+        token_type: 'bearer',
+      },
+    });
+    vi.mocked(devicesApi).heartbeat.mockResolvedValue(settings);
     vi.mocked(useCheckIn).mockReturnValue({
       checkIn: vi.fn().mockResolvedValue({ status: 'success', message: 'Recorded' }),
       checkOut: vi.fn().mockResolvedValue({ status: 'success', message: 'Recorded' }),
@@ -57,7 +77,7 @@ describe('check-in page states', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Unable to reach the attendance service');
   });
 
-  it('announces PAD rejection and does not expose periodic capture globals', () => {
+  it('announces PAD rejection while only the settings heartbeat is periodic', () => {
     const intervalSpy = vi.spyOn(window, 'setInterval');
     vi.mocked(useCheckIn).mockReturnValue({
       checkIn: vi.fn(),
@@ -72,7 +92,7 @@ describe('check-in page states', () => {
     render(<CheckInPage />);
 
     expect(screen.getByRole('alert')).toHaveTextContent('Liveness verification failed');
-    expect(intervalSpy).not.toHaveBeenCalled();
+    expect(intervalSpy).toHaveBeenCalledWith(expect.any(Function), 60_000);
     expect('captureFrame' in window).toBe(false);
   });
 });

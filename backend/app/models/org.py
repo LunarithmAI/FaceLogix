@@ -10,7 +10,12 @@ from .base import Base, TimestampMixin
 if TYPE_CHECKING:
     from .attendance_log import AttendanceLog
     from .audit_log import AuditLog
+    from .calendar_exception import CalendarException
     from .device import Device
+    from .organizational_unit import OrganizationalUnit
+    from .shift import Shift
+    from .shift_assignment import UserShiftAssignment
+    from .unit_assignment import UserUnitAssignment
     from .user import User
 
 
@@ -35,5 +40,20 @@ class Org(Base, TimestampMixin):
         "AttendanceLog", back_populates="org"
     )
     audit_logs: Mapped[list["AuditLog"]] = relationship("AuditLog", back_populates="org")
+    organizational_units: Mapped[list["OrganizationalUnit"]] = relationship(
+        "OrganizationalUnit", back_populates="org", cascade="all, delete-orphan"
+    )
+    unit_assignments: Mapped[list["UserUnitAssignment"]] = relationship(
+        "UserUnitAssignment", back_populates="org", cascade="all, delete-orphan"
+    )
+    shifts: Mapped[list["Shift"]] = relationship(
+        "Shift", back_populates="org", cascade="all, delete-orphan"
+    )
+    shift_assignments: Mapped[list["UserShiftAssignment"]] = relationship(
+        "UserShiftAssignment", back_populates="org", cascade="all, delete-orphan"
+    )
+    calendar_exceptions: Mapped[list["CalendarException"]] = relationship(
+        "CalendarException", back_populates="org", cascade="all, delete-orphan"
+    )
 
     __table_args__ = (Index("orgs_slug_idx", "slug", unique=True),)

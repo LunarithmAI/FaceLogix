@@ -8,6 +8,8 @@ import type {
   UserImportPreview,
   UserImportResolution,
   UserImportResult,
+  ShiftAssignment,
+  UnitAssignment,
   UserListParams,
   UserListResponse,
 } from '@/types/user';
@@ -30,6 +32,14 @@ export const usersApi = {
     return response.data;
   },
 
+  async activate(userId: string, unitId: string, shiftId?: string): Promise<User> {
+    const response = await api.post<User>(`${USERS_BASE}/${userId}/activate`, {
+      unit_id: unitId,
+      shift_id: shiftId || null,
+    });
+    return response.data;
+  },
+
   async delete(userId: string): Promise<void> {
     await api.delete(`${USERS_BASE}/${userId}`);
   },
@@ -39,6 +49,47 @@ export const usersApi = {
       `${USERS_BASE}/${data.user_id}/enroll-face`,
       { images: data.images }
     );
+    return response.data;
+  },
+
+  async setManagedUnits(managerId: string, unitIds: string[]): Promise<User> {
+    const response = await api.put<User>(`${USERS_BASE}/${managerId}/managed-units`, {
+      unit_ids: unitIds,
+    });
+    return response.data;
+  },
+
+  async getUnitAssignments(userId: string): Promise<UnitAssignment[]> {
+    const response = await api.get<UnitAssignment[]>(`${USERS_BASE}/${userId}/unit-assignment`);
+    return response.data;
+  },
+
+  async setUnitAssignment(
+    userId: string,
+    unitId: string | null,
+    effectiveFrom: string
+  ): Promise<UnitAssignment[]> {
+    const response = await api.put<UnitAssignment[]>(`${USERS_BASE}/${userId}/unit-assignment`, {
+      unit_id: unitId,
+      effective_from: effectiveFrom,
+    });
+    return response.data;
+  },
+
+  async getShiftAssignments(userId: string): Promise<ShiftAssignment[]> {
+    const response = await api.get<ShiftAssignment[]>(`${USERS_BASE}/${userId}/shift-assignment`);
+    return response.data;
+  },
+
+  async setShiftAssignment(
+    userId: string,
+    shiftId: string | null,
+    effectiveFrom: string
+  ): Promise<ShiftAssignment[]> {
+    const response = await api.put<ShiftAssignment[]>(`${USERS_BASE}/${userId}/shift-assignment`, {
+      shift_id: shiftId,
+      effective_from: effectiveFrom,
+    });
     return response.data;
   },
 

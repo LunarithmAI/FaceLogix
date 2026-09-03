@@ -8,9 +8,6 @@ export interface OrgSettings {
   timezone: string;
   is_active: boolean;
   settings: {
-    work_start_time: string;
-    work_end_time: string;
-    late_threshold_minutes: number;
     require_liveness: boolean;
     liveness_threshold: number;
     face_match_threshold: number;
@@ -23,9 +20,6 @@ export interface OrgSettingsUpdate {
   name?: string;
   timezone?: string;
   settings?: {
-    work_start_time?: string;
-    work_end_time?: string;
-    late_threshold_minutes?: number;
     require_liveness?: boolean;
     liveness_threshold?: number;
     face_match_threshold?: number;

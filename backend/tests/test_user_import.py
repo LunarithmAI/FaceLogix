@@ -16,6 +16,7 @@ from app.core.database import get_db
 from app.core.identity import UserRole
 from app.models.face_embedding import FaceEmbedding
 from app.models.org import Org
+from app.models.organizational_unit import OrganizationalUnit
 from app.models.user import User
 from app.services.face_client import (
     FaceAnalysis,
@@ -35,9 +36,11 @@ def import_package(csv_text: str, images: dict[str, bytes]) -> bytes:
     return output.getvalue()
 
 
-def face_analysis() -> FaceAnalysis:
+def face_analysis(index: int = 0) -> FaceAnalysis:
+    embedding = [0.0] * 512
+    embedding[index] = 1.0
     return FaceAnalysis(
-        embedding=[0.01] * 512,
+        embedding=embedding,
         quality_score=0.9,
         bbox=FaceBoundingBox(x1=1, y1=1, x2=20, y2=20, confidence=0.99),
         pad_live_score=0.95,
@@ -54,12 +57,12 @@ class FakeFaceClient:
         self.calls += 1
         if self.calls == self.fail_on_call:
             raise FaceServiceError(400, "LOW_QUALITY", "Face quality is too low")
-        return face_analysis()
+        return face_analysis(self.calls - 1)
 
 
 def test_import_package_parser_validates_rows_and_images() -> None:
     package = import_package(
-        "external_id,name,email,department,image_1,image_2\n"
+        "external_id,name,email,unit,image_1,image_2\n"
         "EMP-1,Ada Lovelace,ada@example.com,Engineering,faces/ada.jpg,faces/ada-2.png\n",
         {
             "faces/ada.jpg": b"\xff\xd8\xffjpeg",
@@ -72,6 +75,7 @@ def test_import_package_parser_validates_rows_and_images() -> None:
     assert parsed.total_rows == 1
     assert parsed.errors == ()
     assert parsed.rows[0].external_id == "EMP-1"
+    assert parsed.rows[0].unit == "Engineering"
     assert parsed.rows[0].image_paths == ("faces/ada.jpg", "faces/ada-2.png")
     assert set(parsed.images) == {"faces/ada.jpg", "faces/ada-2.png"}
 
@@ -123,7 +127,7 @@ async def test_import_preview_manual_replace_and_atomic_face_failure() -> None:
         is_active=True,
     )
     package = import_package(
-        "external_id,name,email,department,image_1\n"
+        "external_id,name,email,unit,image_1\n"
         "EXIST-1,Updated Person,updated@example.com,Operations,faces/existing.jpg\n"
         "NEW-1,New Person,new@example.com,Engineering,faces/new.png\n",
         {
@@ -131,10 +135,22 @@ async def test_import_preview_manual_replace_and_atomic_face_failure() -> None:
             "faces/new.png": b"\x89PNG\r\n\x1a\nnew",
         },
     )
+    operations = OrganizationalUnit(
+        org=org,
+        name="Operations",
+        kind="department",
+        is_active=True,
+    )
+    engineering = OrganizationalUnit(
+        org=org,
+        name="Engineering",
+        kind="department",
+        is_active=True,
+    )
 
     try:
         async with session_factory() as session:
-            session.add_all([org, actor, existing])
+            session.add_all([org, actor, existing, operations, engineering])
             await session.commit()
 
             app = FastAPI()
@@ -190,7 +206,14 @@ async def test_import_preview_manual_replace_and_atomic_face_failure() -> None:
                     "Existing Person",
                     "Import Admin",
                 ]
-                assert await session.scalar(select(func.count(FaceEmbedding.id))) == 0
+                assert (
+                    await session.scalar(
+                        select(func.count(FaceEmbedding.id))
+                        .join(User, FaceEmbedding.user_id == User.id)
+                        .where(User.org_id == org.id)
+                    )
+                    == 0
+                )
 
                 app.dependency_overrides[get_face_client] = lambda: FakeFaceClient()
                 imported_response = await client.post(
@@ -226,7 +249,14 @@ async def test_import_preview_manual_replace_and_atomic_face_failure() -> None:
                 for person in imported_people
                 if person.external_id is not None
             )
-            assert await session.scalar(select(func.count(FaceEmbedding.id))) == 2
+            assert (
+                await session.scalar(
+                    select(func.count(FaceEmbedding.id))
+                    .join(User, FaceEmbedding.user_id == User.id)
+                    .where(User.org_id == org.id)
+                )
+                == 2
+            )
     finally:
         async with session_factory() as cleanup_session:
             await cleanup_session.execute(delete(Org).where(Org.id == org.id))

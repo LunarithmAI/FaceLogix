@@ -67,15 +67,22 @@ describe('server-state pages', () => {
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
   });
 
-  it('preserves a valid zero setting and makes manager settings read-only', async () => {
+  it('makes manager organization settings read-only', async () => {
     useAuthStore.setState({
-      user: {
-        id: 'manager-id',
-        org_id: 'org-id',
-        name: 'Manager',
-        role: 'manager',
+      session: {
+        kind: 'user',
+        user: {
+          id: 'manager-id',
+          org_id: 'org-id',
+          name: 'Manager',
+          role: 'manager',
+        },
+        tokens: {
+          access_token: 'access',
+          refresh_token: 'refresh',
+          token_type: 'bearer',
+        },
       },
-      isAuthenticated: true,
     });
     vi.mocked(settingsApi).getOrgSettings.mockResolvedValue({
       id: 'org-id',
@@ -84,9 +91,6 @@ describe('server-state pages', () => {
       timezone: 'UTC',
       is_active: true,
       settings: {
-        work_start_time: '09:00',
-        work_end_time: '17:00',
-        late_threshold_minutes: 0,
         require_liveness: true,
         liveness_threshold: 0.8,
         face_match_threshold: 0.75,
@@ -106,10 +110,9 @@ describe('server-state pages', () => {
 
     renderWithQueries(<SettingsPage />);
 
-    const threshold = await screen.findByLabelText('Late Threshold (minutes)');
-    expect(threshold).toHaveValue(0);
+    const threshold = await screen.findByLabelText('Liveness Threshold (80%)');
+    expect(threshold).toHaveValue('0.8');
     expect(threshold).toBeDisabled();
-    expect(screen.getByText(/more than 0 minutes/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Save Changes' })).not.toBeInTheDocument();
   });
 });

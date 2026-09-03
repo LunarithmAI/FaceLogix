@@ -19,13 +19,6 @@ sys.path.insert(0, str(backend_dir))
 # Import model metadata without constructing application settings.
 from app.models import (
     Base,
-    AttendanceLog,
-    AuditLog,
-    Device,
-    FaceEmbedding,
-    Org,
-    RefreshToken,
-    User,
 )
 
 # Alembic Config object

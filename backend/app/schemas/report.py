@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from app.schemas.unit import UnitSummary as UnitDefinitionSummary
+
 
 class RecentActivity(BaseModel):
     id: UUID
@@ -81,7 +83,11 @@ class WeeklyTrendPoint(BaseModel):
     check_outs: int
 
 
-class DepartmentSummary(BaseModel):
-    department: str
-    present: int
-    absent: int
+class UnitSummary(BaseModel):
+    unit: UnitDefinitionSummary
+    scheduled_person_days: int
+    present_person_days: int
+    absent_person_days: int
+    on_time: int
+    late: int
+    attendance_rate: float

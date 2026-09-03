@@ -1,7 +1,7 @@
 import csv
 import io
 import os
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time
 from uuid import uuid4
 
 import httpx
@@ -15,6 +15,10 @@ from app.api.v1 import reports
 from app.core.database import get_db
 from app.models.attendance_log import AttendanceLog
 from app.models.org import Org
+from app.models.organizational_unit import OrganizationalUnit
+from app.models.shift import Shift
+from app.models.shift_assignment import UserShiftAssignment
+from app.models.unit_assignment import UserUnitAssignment
 from app.models.user import User
 
 
@@ -56,16 +60,51 @@ async def test_reports_group_by_local_date_and_export_safe_csv() -> None:
         role="member",
         is_active=True,
     )
+    unit = OrganizationalUnit(
+        id=uuid4(),
+        org_id=org.id,
+        name="Engineering",
+        kind="department",
+        is_active=True,
+    )
+    shift = Shift(
+        id=uuid4(),
+        org_id=org.id,
+        name="Day",
+        start_time=time(9),
+        end_time=time(17),
+        late_grace_minutes=15,
+        early_departure_grace_minutes=0,
+        scheduled_weekdays=[0],
+        is_active=True,
+    )
+    unit_assignment = UserUnitAssignment(
+        org_id=org.id,
+        user_id=member.id,
+        unit_id=unit.id,
+        effective_from=date(2026, 8, 1),
+    )
+    shift_assignment = UserShiftAssignment(
+        org_id=org.id,
+        user_id=member.id,
+        shift_id=shift.id,
+        effective_from=date(2026, 8, 1),
+    )
 
     try:
         async with session_factory() as session:
-            session.add_all([org, operator, member])
+            session.add_all(
+                [org, operator, member, unit, shift, unit_assignment, shift_assignment]
+            )
             await session.flush()
             session.add_all(
                 [
                     AttendanceLog(
                         org_id=org.id,
                         user_id=member.id,
+                        unit_id=unit.id,
+                        shift_id=shift.id,
+                        schedule_date=date(2026, 8, 2),
                         ts=datetime(2026, 8, 3, 3, 30, tzinfo=UTC),
                         type="check_in",
                         status="on_time",
@@ -75,6 +114,9 @@ async def test_reports_group_by_local_date_and_export_safe_csv() -> None:
                     AttendanceLog(
                         org_id=org.id,
                         user_id=member.id,
+                        unit_id=unit.id,
+                        shift_id=shift.id,
+                        schedule_date=date(2026, 8, 3),
                         ts=datetime(2026, 8, 3, 13, 30, tzinfo=UTC),
                         type="check_in",
                         status="on_time",
@@ -86,7 +128,10 @@ async def test_reports_group_by_local_date_and_export_safe_csv() -> None:
                         user_id=member.id,
                         ts=datetime(2026, 8, 3, 22, 0, tzinfo=UTC),
                         type="check_out",
-                        status="early",
+                        status="early_departure",
+                        unit_id=unit.id,
+                        shift_id=shift.id,
+                        schedule_date=date(2026, 8, 3),
                         confidence_score=0.9,
                         meta={},
                     ),
@@ -103,7 +148,7 @@ async def test_reports_group_by_local_date_and_export_safe_csv() -> None:
             assert len(daily) == 1
             assert daily[0].check_ins == 1
             assert daily[0].check_outs == 1
-            assert daily[0].absent == 1
+            assert daily[0].absent == 0
 
             user_stats = await reports.get_user_stats(
                 member.id,
@@ -126,7 +171,7 @@ async def test_reports_group_by_local_date_and_export_safe_csv() -> None:
             rows = list(csv.reader(io.StringIO(bytes(response.body).decode())))
             assert len(rows) == 3
             assert {row[1] for row in rows[1:]} == {"'=SUM(1,2)"}
-            assert any(row[-1] == "0.0000" for row in rows[1:])
+            assert any(row[-3] == "0.0000" for row in rows[1:])
 
             app = FastAPI()
             app.include_router(reports.router)
