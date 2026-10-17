@@ -1,5 +1,6 @@
 import i18n, { type TOptions } from 'i18next';
 import { initReactI18next } from 'react-i18next';
+import { en } from './en';
 import { vi } from './vi';
 
 export const supportedLanguages = ['en', 'vi'] as const;
@@ -23,7 +24,7 @@ void i18n
   .use(initReactI18next)
   .init({
     resources: {
-      en: { translation: {} },
+      en: { translation: en },
       vi: { translation: vi },
     },
     lng: getInitialLanguage(),

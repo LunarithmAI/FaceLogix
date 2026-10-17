@@ -11,6 +11,8 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { AttendanceList } from '@/components/attendance/AttendanceList';
 import { Loading } from '@/components/ui/Loading';
 import { Button } from '@/components/ui/Button';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { StatCard } from '@/components/ui/StatCard';
 import { reportsApi } from '@/services/reports';
 import { queryKeys } from '@/lib/queryClient';
 import { translate as t } from '@/i18n';
@@ -36,9 +38,9 @@ export function DashboardPage() {
 
   if (error !== null) {
     return (
-      <div className="text-center py-12">
-        <ExclamationTriangleIcon className="w-12 h-12 text-red-500 mx-auto mb-4" />
-        <p className="text-red-600">{error.message}</p>
+      <div className="py-12 text-center" role="alert">
+        <ExclamationTriangleIcon className="mx-auto mb-4 h-12 w-12 text-red-500" aria-hidden="true" />
+        <p className="text-red-700">{t(error.message)}</p>
         <Button
           type="button"
           variant="secondary"
@@ -57,165 +59,98 @@ export function DashboardPage() {
       ? Math.round((today.checked_in / today.total_employees) * 100)
       : 0;
 
+  const summaryRows = [
+    { label: t('Total Employees'), value: today.total_employees, className: 'text-gray-900' },
+    { label: t('Checked In'), value: today.checked_in, className: 'text-green-700' },
+    { label: t('Checked Out'), value: today.checked_out, className: 'text-primary-700' },
+    { label: t('Absent'), value: today.absent, className: 'text-red-700' },
+    { label: t('Late Arrivals'), value: today.late_arrivals, className: 'text-yellow-700' },
+  ];
+
   return (
     <div className="space-y-6">
-        {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t('Dashboard')}</h1>
-          <p className="text-gray-500 mt-1">{t("Welcome back! Here's today's overview.")}</p>
-        </div>
+      <PageHeader
+        title={t('Dashboard')}
+        description={t("Welcome back! Here's today's overview.")}
+      />
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* Total Employees */}
-          <Card>
-            <div className="flex items-center">
-              <div className="p-3 bg-blue-100 rounded-lg">
-                <UsersIcon className="w-6 h-6 text-blue-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">{t('Total Users')}</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {stats?.total_users || 0}
-                </p>
-              </div>
-            </div>
-          </Card>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 lg:gap-6">
+        <StatCard label={t('Total Users')} value={stats.total_users} icon={UsersIcon} />
+        <StatCard
+          label={t('Active Devices')}
+          value={stats.active_devices}
+          icon={DeviceTabletIcon}
+          tone="neutral"
+        />
+        <StatCard
+          label={t("Today's Check-ins")}
+          value={today.checked_in}
+          icon={ClipboardDocumentCheckIcon}
+          tone="success"
+        />
+        <StatCard
+          label={t('Attendance Rate')}
+          value={`${attendanceRate}%`}
+          icon={attendanceRate >= 80 ? ArrowTrendingUpIcon : ArrowTrendingDownIcon}
+          tone={attendanceRate >= 80 ? 'success' : 'warning'}
+        />
+      </div>
 
-          {/* Active Devices */}
-          <Card>
-            <div className="flex items-center">
-              <div className="p-3 bg-green-100 rounded-lg">
-                <DeviceTabletIcon className="w-6 h-6 text-green-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">{t('Active Devices')}</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {stats?.active_devices || 0}
-                </p>
-              </div>
-            </div>
-          </Card>
-
-          {/* Today's Check-ins */}
-          <Card>
-            <div className="flex items-center">
-              <div className="p-3 bg-purple-100 rounded-lg">
-                <ClipboardDocumentCheckIcon className="w-6 h-6 text-purple-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">{t("Today's Check-ins")}</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {today?.checked_in || 0}
-                </p>
-              </div>
-            </div>
-          </Card>
-
-          {/* Attendance Rate */}
-          <Card>
-            <div className="flex items-center">
-              <div
-                className={`p-3 rounded-lg ${
-                  attendanceRate >= 80 ? 'bg-green-100' : 'bg-yellow-100'
-                }`}
-              >
-                {attendanceRate >= 80 ? (
-                  <ArrowTrendingUpIcon className="w-6 h-6 text-green-600" />
-                ) : (
-                  <ArrowTrendingDownIcon className="w-6 h-6 text-yellow-600" />
-                )}
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">{t('Attendance Rate')}</p>
-                <p className="text-2xl font-bold text-gray-900">{attendanceRate}%</p>
-              </div>
-            </div>
-          </Card>
-        </div>
-
-        {/* Today's Summary */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Daily Stats */}
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("Today's Summary")}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">{t('Total Employees')}</span>
-                  <span className="font-medium">{today?.total_employees || 0}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">{t('Checked In')}</span>
-                  <span className="font-medium text-green-600">
-                    {today?.checked_in || 0}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">{t('Checked Out')}</span>
-                  <span className="font-medium text-blue-600">
-                    {today?.checked_out || 0}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">{t('Absent')}</span>
-                  <span className="font-medium text-red-600">
-                    {today?.absent || 0}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">{t('Late Arrivals')}</span>
-                  <span className="font-medium text-yellow-600">
-                    {today?.late_arrivals || 0}
-                  </span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Pending Enrollments */}
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('Quick Stats')}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">{t('Pending Face Enrollments')}</span>
-                  <span className="font-medium text-orange-600">
-                    {stats?.pending_enrollments || 0}
-                  </span>
-                </div>
-                {today?.average_check_in_time && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">{t('Avg Check-in Time')}</span>
-                    <span className="font-medium">{today.average_check_in_time}</span>
-                  </div>
-                )}
-                {today?.average_check_out_time && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">{t('Avg Check-out Time')}</span>
-                    <span className="font-medium">{today.average_check_out_time}</span>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Recent Activity */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>{t('Recent Activity')}</CardTitle>
+            <CardTitle>{t("Today's Summary")}</CardTitle>
           </CardHeader>
           <CardContent>
-            <AttendanceList
-              logs={stats?.recent_activity || []}
-              emptyMessage={t('No recent activity')}
-            />
+            <dl className="divide-y divide-gray-100">
+              {summaryRows.map((row) => (
+                <div key={row.label} className="flex items-center justify-between py-2.5">
+                  <dt className="text-gray-600">{row.label}</dt>
+                  <dd className={`font-semibold tabular-nums ${row.className}`}>{row.value}</dd>
+                </div>
+              ))}
+            </dl>
           </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('Quick Stats')}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <dl className="divide-y divide-gray-100">
+              <div className="flex items-center justify-between py-2.5">
+                <dt className="text-gray-600">{t('Pending Face Enrollments')}</dt>
+                <dd className="font-semibold tabular-nums text-yellow-700">
+                  {stats.pending_enrollments}
+                </dd>
+              </div>
+              {today.average_check_in_time && (
+                <div className="flex items-center justify-between py-2.5">
+                  <dt className="text-gray-600">{t('Avg Check-in Time')}</dt>
+                  <dd className="font-semibold tabular-nums text-gray-900">
+                    {today.average_check_in_time}
+                  </dd>
+                </div>
+              )}
+              {today.average_check_out_time && (
+                <div className="flex items-center justify-between py-2.5">
+                  <dt className="text-gray-600">{t('Avg Check-out Time')}</dt>
+                  <dd className="font-semibold tabular-nums text-gray-900">
+                    {today.average_check_out_time}
+                  </dd>
+                </div>
+              )}
+            </dl>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card padding="none" className="overflow-hidden">
+        <CardHeader className="px-4 pt-4 sm:px-6 sm:pt-6">
+          <CardTitle>{t('Recent Activity')}</CardTitle>
+        </CardHeader>
+        <AttendanceList logs={stats.recent_activity} emptyMessage={t('No recent activity')} />
       </Card>
     </div>
   );

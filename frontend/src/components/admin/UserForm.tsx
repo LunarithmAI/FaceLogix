@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
 import type { User, CreateUserRequest, UpdateUserRequest } from '@/types/user';
 import type { UserRole } from '@/types/roles';
@@ -120,20 +121,17 @@ export function UserForm({
         />
       )}
 
-      <div>
-        <label htmlFor="user-role" className="block text-sm font-medium text-gray-700 mb-1">{t('Role')}</label>
-        <select
-          id="user-role"
-          value={formData.role}
-          onChange={(e) => setFormData({ ...formData, role: e.target.value as UserRole })}
-          className="block w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-        >
-          <option value="member">{t('Member')}</option>
-          {canAssignElevatedRoles && <option value="manager">{t('Manager')}</option>}
-          {canAssignElevatedRoles && <option value="admin">{t('Admin')}</option>}
-          {canAssignElevatedRoles && <option value="super_admin">{t('Super Admin')}</option>}
-        </select>
-      </div>
+      <Select
+        id="user-role"
+        label={t('Role')}
+        value={formData.role}
+        onChange={(e) => setFormData({ ...formData, role: e.target.value as UserRole })}
+      >
+        <option value="member">{t('Member')}</option>
+        {canAssignElevatedRoles && <option value="manager">{t('Manager')}</option>}
+        {canAssignElevatedRoles && <option value="admin">{t('Admin')}</option>}
+        {canAssignElevatedRoles && <option value="super_admin">{t('Super Admin')}</option>}
+      </Select>
 
       <Input
         label={t('External ID')}
@@ -144,42 +142,32 @@ export function UserForm({
 
       {!user && (
         <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label htmlFor="user-unit" className="mb-1 block text-sm font-medium text-gray-700">
-              {t('Unit')}
-            </label>
-            <select
-              id="user-unit"
-              value={formData.unit_id}
-              onChange={(event) => setFormData({ ...formData, unit_id: event.target.value })}
-              className="block w-full rounded-lg border border-gray-300 bg-white px-4 py-2 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              <option value="">{t('Not assigned')}</option>
-              {units.map((unit) => (
-                <option key={unit.id} value={unit.id}>{unit.name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="user-shift" className="mb-1 block text-sm font-medium text-gray-700">
-              {t('Shift')}
-            </label>
-            <select
-              id="user-shift"
-              value={formData.shift_id}
-              onChange={(event) => setFormData({ ...formData, shift_id: event.target.value })}
-              className="block w-full rounded-lg border border-gray-300 bg-white px-4 py-2 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              <option value="">{t('Not assigned')}</option>
-              {shifts.map((shift) => (
-                <option key={shift.id} value={shift.id}>{shift.name}</option>
-              ))}
-            </select>
-          </div>
+          <Select
+            id="user-unit"
+            label={t('Unit')}
+            value={formData.unit_id}
+            onChange={(event) => setFormData({ ...formData, unit_id: event.target.value })}
+          >
+            <option value="">{t('Not assigned')}</option>
+            {units.map((unit) => (
+              <option key={unit.id} value={unit.id}>{unit.name}</option>
+            ))}
+          </Select>
+          <Select
+            id="user-shift"
+            label={t('Shift')}
+            value={formData.shift_id}
+            onChange={(event) => setFormData({ ...formData, shift_id: event.target.value })}
+          >
+            <option value="">{t('Not assigned')}</option>
+            {shifts.map((shift) => (
+              <option key={shift.id} value={shift.id}>{shift.name}</option>
+            ))}
+          </Select>
         </div>
       )}
 
-      <div className="flex justify-end gap-3 pt-4">
+      <div className="flex flex-col-reverse gap-3 pt-4 sm:flex-row sm:justify-end">
         <Button type="button" variant="secondary" onClick={onCancel}>
           {t('Cancel')}
         </Button>

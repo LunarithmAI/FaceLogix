@@ -47,7 +47,7 @@ export function Badge({
   return (
     <span
       className={`
-        inline-flex items-center font-medium rounded-full
+        inline-flex items-center whitespace-nowrap font-medium rounded-full
         ${variantStyles[variant]}
         ${sizeStyles[size]}
         ${className}
@@ -56,6 +56,7 @@ export function Badge({
       {dot && (
         <span
           className={`w-1.5 h-1.5 rounded-full mr-1.5 ${dotVariantStyles[variant]}`}
+          aria-hidden="true"
         />
       )}
       {children}
@@ -78,6 +79,19 @@ export function StatusBadge({ status }: { status: 'active' | 'inactive' | 'pendi
       {t(label)}
     </Badge>
   );
+}
+
+const attendanceStatusVariants: Record<string, BadgeVariant> = {
+  on_time: 'success',
+  late: 'warning',
+  early_departure: 'warning',
+  absent: 'danger',
+  unscheduled: 'default',
+  not_scheduled: 'default',
+};
+
+export function AttendanceStatusBadge({ status }: { status: string }) {
+  return <Badge variant={attendanceStatusVariants[status] ?? 'default'}>{t(status)}</Badge>;
 }
 
 export function RoleBadge({ role }: { role: UserRole }) {

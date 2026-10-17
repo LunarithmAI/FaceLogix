@@ -33,7 +33,7 @@ export function Header({ onOpenSidebar, menuButtonRef }: HeaderProps) {
 
   return (
     <header className="sticky top-0 z-30 border-b border-gray-200 bg-white">
-      <div className="flex h-16 items-center justify-between px-4 sm:px-6">
+      <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
         <button
           ref={menuButtonRef}
           type="button"
@@ -54,7 +54,7 @@ export function Header({ onOpenSidebar, menuButtonRef }: HeaderProps) {
             trigger={
               <>
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 text-sm font-medium text-primary-700">
-                  {user?.name.charAt(0) ?? 'U'}
+                  {user?.name.charAt(0).toUpperCase() ?? 'U'}
                 </span>
                 <span className="hidden sm:block">
                   <span className="block text-sm font-medium text-gray-900">{user?.name}</span>

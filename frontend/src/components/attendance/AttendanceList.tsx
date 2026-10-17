@@ -4,7 +4,7 @@ import {
 } from '@heroicons/react/24/outline';
 import type { AttendanceLog } from '@/types/attendance';
 import { formatTime, formatShortDate } from '@/utils/date';
-import { Badge } from '@/components/ui/Badge';
+import { AttendanceStatusBadge, Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { translate as t } from '@/i18n';
 
@@ -90,12 +90,12 @@ export function AttendanceList({
                 <div className="flex items-center">
                   {log.check_type === 'check_in' ? (
                     <span className="flex items-center text-green-600">
-                      <ArrowRightOnRectangleIcon className="w-5 h-5 mr-2" />
+                      <ArrowRightOnRectangleIcon className="w-5 h-5 mr-2" aria-hidden="true" />
                       <Badge variant="success">{t('Check In')}</Badge>
                     </span>
                   ) : (
                     <span className="flex items-center text-blue-600">
-                      <ArrowLeftOnRectangleIcon className="w-5 h-5 mr-2" />
+                      <ArrowLeftOnRectangleIcon className="w-5 h-5 mr-2" aria-hidden="true" />
                       <Badge variant="info">{t('Check Out')}</Badge>
                     </span>
                   )}
@@ -113,8 +113,8 @@ export function AttendanceList({
                 <span>{log.shift_name || t('No shift')}</span>
               </td>
               <td className="px-6 py-4 text-sm text-gray-600">
-                <span className="block">{t(log.status)}</span>
-                <span className="text-xs uppercase tracking-wide text-gray-400">{t(log.source)}</span>
+                <AttendanceStatusBadge status={log.status} />
+                <span className="mt-1 block whitespace-nowrap text-xs uppercase tracking-wide text-gray-400">{t(log.source)}</span>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
                 <div className="text-sm text-gray-900">
@@ -135,7 +135,7 @@ export function AttendanceList({
                 <div className="flex items-center">
                   {typeof log.confidence === 'number' && log.confidence > 0 ? (
                     <>
-                      <div className="w-16 h-2 bg-gray-200 rounded-full mr-2">
+                      <div className="w-16 h-2 bg-gray-200 rounded-full mr-2 overflow-hidden" aria-hidden="true">
                         <div
                           className={`h-2 rounded-full ${
                             log.confidence > 0.9
@@ -147,7 +147,7 @@ export function AttendanceList({
                           style={{ width: `${log.confidence * 100}%` }}
                         />
                       </div>
-                      <span className="text-sm text-gray-600">
+                      <span className="text-sm tabular-nums text-gray-600">
                         {Math.round(log.confidence * 100)}%
                       </span>
                     </>

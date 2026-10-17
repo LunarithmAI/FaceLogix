@@ -3,6 +3,7 @@ import { NavLink } from 'react-router';
 import {
   BuildingOffice2Icon,
   CalendarDaysIcon,
+  CameraIcon,
   ChartBarIcon,
   ClipboardDocumentListIcon,
   ClockIcon,
@@ -46,10 +47,11 @@ function NavigationContent({ onNavigate }: { onNavigate?: () => void }) {
     session?.kind === 'user' && ADMIN_ROLES.includes(session.user.role);
   return (
     <>
-      <div className="flex h-16 items-center border-b border-gray-200 px-6">
-        <span className="text-xl font-bold text-primary-700">FaceLogix</span>
+      <div className="flex h-16 items-center gap-2.5 border-b border-gray-200 px-6">
+        <img src="/favicon.svg" alt="" className="h-8 w-8" />
+        <span className="text-xl font-bold tracking-tight text-gray-900">FaceLogix</span>
       </div>
-      <nav className="flex-1 space-y-1 overflow-y-auto px-4 py-4" aria-label={t('Administration')}>
+      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4" aria-label={t('Administration')}>
         {navigation.filter((item) => !item.adminOnly || isAdmin).map((item) => (
           <NavLink
             key={item.name}
@@ -57,7 +59,7 @@ function NavigationContent({ onNavigate }: { onNavigate?: () => void }) {
             end={item.href === '/admin'}
             onClick={onNavigate}
             className={({ isActive }) =>
-              `flex min-h-11 items-center rounded-lg px-4 py-3 text-sm font-medium transition-colors duration-200 motion-reduce:transition-none ${
+              `flex min-h-11 items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 motion-reduce:transition-none ${
                 isActive
                   ? 'bg-primary-50 text-primary-700'
                   : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
@@ -76,12 +78,13 @@ function NavigationContent({ onNavigate }: { onNavigate?: () => void }) {
           </NavLink>
         ))}
       </nav>
-      <div className="border-t border-gray-200 p-4">
+      <div className="border-t border-gray-200 p-3">
         <NavLink
           to="/"
           onClick={onNavigate}
-          className="flex min-h-11 items-center rounded-lg px-4 py-3 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 motion-reduce:transition-none"
+          className="flex min-h-11 items-center rounded-lg px-3 py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 motion-reduce:transition-none"
         >
+          <CameraIcon className="mr-3 h-5 w-5 text-gray-400" aria-hidden="true" />
           {t('Check-In Kiosk')}
         </NavLink>
       </div>

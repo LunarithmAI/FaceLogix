@@ -7,6 +7,10 @@ import { Input } from '@/components/ui/Input';
 import { Modal, ConfirmModal, ModalFooter } from '@/components/ui/Modal';
 import { DeviceTable } from '@/components/admin/DeviceTable';
 import { Loading } from '@/components/ui/Loading';
+import { Alert } from '@/components/ui/Alert';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Pagination } from '@/components/ui/Pagination';
+import { Select } from '@/components/ui/Select';
 import { devicesApi } from '@/services/devices';
 import type {
   Device,
@@ -218,43 +222,39 @@ export function DevicesPage() {
   return (
     <>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{t('Devices')}</h1>
-            <p className="text-gray-500 mt-1">{t('Manage check-in devices and kiosks')}</p>
-          </div>
-          <Button leftIcon={<PlusIcon className="w-5 h-5" />} onClick={handleCreate}>
-            {t('Add Device')}
-          </Button>
-        </div>
+        <PageHeader
+          title={t('Devices')}
+          description={t('Manage check-in devices and kiosks')}
+          actions={
+            <Button
+              leftIcon={<PlusIcon className="h-5 w-5" aria-hidden="true" />}
+              onClick={handleCreate}
+            >
+              {t('Add Device')}
+            </Button>
+          }
+        />
 
-        {actionError !== null && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700" role="alert">
-            {t(actionError.message)}
-          </div>
-        )}
+        {actionError !== null && <Alert>{t(actionError.message)}</Alert>}
 
-        {/* Search */}
-        <Card padding="sm">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1">
-              <div className="relative">
-                <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <Input
-                  type="search"
-                  placeholder={t('Search devices...')}
-                  value={search}
-                  onChange={(e) => handleSearch(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
+        <Card padding="none" className="overflow-hidden">
+          <div className="border-b border-gray-200 p-4 sm:px-6">
+            <div className="relative max-w-md">
+              <MagnifyingGlassIcon
+                className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400"
+                aria-hidden="true"
+              />
+              <Input
+                type="search"
+                aria-label={t('Search devices')}
+                placeholder={t('Search devices...')}
+                value={search}
+                onChange={(e) => handleSearch(e.target.value)}
+                className="pl-10"
+              />
             </div>
           </div>
-        </Card>
 
-        {/* Devices Table */}
-        <Card>
           {devicesQuery.isPending ? (
             <div className="py-12">
               <Loading size="lg" text={t('Loading devices...')} />
@@ -279,32 +279,14 @@ export function DevicesPage() {
                 onToggleStatus={handleToggleStatus}
                 onRegenerateSecret={handleRegenerateSecret}
               />
-
-              {/* Pagination */}
-              {devices && devices.pages > 1 && (
-                <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200">
-                  <p className="text-sm text-gray-500">
-                    {t('Page')} {devices.page} {t('of')} {devices.pages} ({devices.total} {t('devices')})
-                  </p>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => setPage(page - 1)}
-                      disabled={page === 1}
-                    >
-                      {t('Previous')}
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => setPage(page + 1)}
-                      disabled={page === devices.pages}
-                    >
-                      {t('Next')}
-                    </Button>
-                  </div>
-                </div>
+              {devices && (
+                <Pagination
+                  page={devices.page}
+                  pages={devices.pages}
+                  total={devices.total}
+                  itemLabel={t('devices')}
+                  onPageChange={setPage}
+                />
               )}
             </>
           )}
@@ -318,11 +300,7 @@ export function DevicesPage() {
         title={selectedDevice ? t('Edit Device') : t('Register Device')}
       >
         <div className="space-y-4">
-          {saveMutation.error !== null && (
-            <p className="text-sm text-red-700" role="alert">
-              {t(saveMutation.error.message)}
-            </p>
-          )}
+          {saveMutation.error !== null && <Alert>{t(saveMutation.error.message)}</Alert>}
           <Input
             label={t('Device Name')}
             value={formData.name}
@@ -331,24 +309,19 @@ export function DevicesPage() {
             required
           />
 
-          <div>
-            <label htmlFor="device-type" className="block text-sm font-medium text-gray-700 mb-1">
-              {t('Device Type')}
-            </label>
-            <select
-              id="device-type"
-              value={formData.device_type}
-              onChange={(e) =>
-                setFormData({ ...formData, device_type: e.target.value as DeviceType })
-              }
-              className="block w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-            >
-              <option value="kiosk">{t('Kiosk')}</option>
-              <option value="tablet">{t('Tablet')}</option>
-              <option value="mobile">{t('Mobile')}</option>
-              <option value="web">{t('Web')}</option>
-            </select>
-          </div>
+          <Select
+            id="device-type"
+            label={t('Device Type')}
+            value={formData.device_type}
+            onChange={(e) =>
+              setFormData({ ...formData, device_type: e.target.value as DeviceType })
+            }
+          >
+            <option value="kiosk">{t('Kiosk')}</option>
+            <option value="tablet">{t('Tablet')}</option>
+            <option value="mobile">{t('Mobile')}</option>
+            <option value="web">{t('Web')}</option>
+          </Select>
 
           <Input
             label={t('Location')}
@@ -357,7 +330,7 @@ export function DevicesPage() {
             placeholder={t('Building A, Floor 1')}
           />
 
-          <fieldset className="space-y-3 border border-gray-200 p-4">
+          <fieldset className="space-y-1 rounded-lg border border-gray-200 px-4 pb-3 pt-2">
             <legend className="px-1 text-sm font-semibold text-gray-900">
               {t('Kiosk actions')}
             </legend>
@@ -366,7 +339,7 @@ export function DevicesPage() {
                 type="checkbox"
                 checked={formData.settings.allow_check_in}
                 onChange={(event) => setActionEnabled('allow_check_in', event.target.checked)}
-                className="h-5 w-5 border-gray-300 text-primary-600 focus:ring-primary-500"
+                className="h-5 w-5 rounded border-gray-300 accent-primary-600"
               />
               {t('Allow check-in')}
             </label>
@@ -375,74 +348,54 @@ export function DevicesPage() {
                 type="checkbox"
                 checked={formData.settings.allow_check_out}
                 onChange={(event) => setActionEnabled('allow_check_out', event.target.checked)}
-                className="h-5 w-5 border-gray-300 text-primary-600 focus:ring-primary-500"
+                className="h-5 w-5 rounded border-gray-300 accent-primary-600"
               />
               {t('Allow check-out')}
             </label>
             {!formData.settings.allow_check_in && !formData.settings.allow_check_out && (
-              <p className="text-sm text-amber-700" role="status">
+              <Alert variant="warning">
                 {t('This kiosk will be blocked until an action is enabled.')}
-              </p>
+              </Alert>
             )}
           </fieldset>
 
-          <div>
-            <label
-              htmlFor="default-mode"
-              className="mb-1 block text-sm font-medium text-gray-700"
-            >
-              {t('Default mode')}
-            </label>
-            <select
-              id="default-mode"
-              value={formData.settings.default_mode}
-              onChange={(event) =>
-                setFormData({
-                  ...formData,
-                  settings: {
-                    ...formData.settings,
-                    default_mode: event.target.value as DeviceMode,
-                  },
-                })
-              }
-              className="block min-h-11 w-full border border-gray-300 bg-white px-4 py-2 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              <option value="check_in">{t('Check In')}</option>
-              <option value="check_out">{t('Check Out')}</option>
-            </select>
-          </div>
+          <Select
+            id="default-mode"
+            label={t('Default mode')}
+            value={formData.settings.default_mode}
+            onChange={(event) =>
+              setFormData({
+                ...formData,
+                settings: {
+                  ...formData.settings,
+                  default_mode: event.target.value as DeviceMode,
+                },
+              })
+            }
+          >
+            <option value="check_in">{t('Check In')}</option>
+            <option value="check_out">{t('Check Out')}</option>
+          </Select>
 
-          <div>
-            <label
-              htmlFor="camera-facing"
-              className="mb-1 block text-sm font-medium text-gray-700"
-            >
-              {t('Camera facing')}
-            </label>
-            <select
-              id="camera-facing"
-              value={formData.settings.camera_facing}
-              onChange={(event) =>
-                setFormData({
-                  ...formData,
-                  settings: {
-                    ...formData.settings,
-                    camera_facing: event.target.value as 'user' | 'environment',
-                  },
-                })
-              }
-              className="block min-h-11 w-full border border-gray-300 bg-white px-4 py-2 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              <option value="user">{t('Front camera')}</option>
-              <option value="environment">{t('Rear camera')}</option>
-            </select>
-          </div>
+          <Select
+            id="camera-facing"
+            label={t('Camera facing')}
+            value={formData.settings.camera_facing}
+            onChange={(event) =>
+              setFormData({
+                ...formData,
+                settings: {
+                  ...formData.settings,
+                  camera_facing: event.target.value as 'user' | 'environment',
+                },
+              })
+            }
+          >
+            <option value="user">{t('Front camera')}</option>
+            <option value="environment">{t('Rear camera')}</option>
+          </Select>
 
-          {settingsError !== null && (
-            <p className="text-sm text-red-700" role="alert">
-              {settingsError}
-            </p>
-          )}
+          {settingsError !== null && <Alert>{settingsError}</Alert>}
         </div>
 
         <ModalFooter>
