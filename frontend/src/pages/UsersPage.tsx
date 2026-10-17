@@ -11,6 +11,9 @@ import { EnrollmentModal } from '@/components/admin/EnrollmentModal';
 import { UserImportModal } from '@/components/admin/UserImportModal';
 import { UserAssignmentsPanel } from '@/components/admin/UserAssignmentsPanel';
 import { Loading } from '@/components/ui/Loading';
+import { Alert } from '@/components/ui/Alert';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Pagination } from '@/components/ui/Pagination';
 import { usersApi } from '@/services/users';
 import { shiftsApi } from '@/services/shifts';
 import { unitsApi } from '@/services/units';
@@ -130,55 +133,48 @@ export function UsersPage() {
   return (
     <>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{t('Users')}</h1>
-            <p className="text-gray-500 mt-1">{t('Manage user accounts and face enrollments')}</p>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Button
-              variant="secondary"
-              leftIcon={<ArrowUpTrayIcon className="h-5 w-5" aria-hidden="true" />}
-              onClick={() => setIsImportOpen(true)}
-            >
-              {t('Import People')}
-            </Button>
-            <Button
-              leftIcon={<PlusIcon className="h-5 w-5" aria-hidden="true" />}
-              onClick={handleCreate}
-            >
-              {t('Add User')}
-            </Button>
-          </div>
-        </div>
+        <PageHeader
+          title={t('Users')}
+          description={t('Manage user accounts and face enrollments')}
+          actions={
+            <>
+              <Button
+                variant="secondary"
+                leftIcon={<ArrowUpTrayIcon className="h-5 w-5" aria-hidden="true" />}
+                onClick={() => setIsImportOpen(true)}
+              >
+                {t('Import People')}
+              </Button>
+              <Button
+                leftIcon={<PlusIcon className="h-5 w-5" aria-hidden="true" />}
+                onClick={handleCreate}
+              >
+                {t('Add User')}
+              </Button>
+            </>
+          }
+        />
 
-        {actionError !== null && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700" role="alert">
-            {t(actionError.message)}
-          </div>
-        )}
+        {actionError !== null && <Alert>{t(actionError.message)}</Alert>}
 
-        {/* Search and Filters */}
-        <Card padding="sm">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1">
-              <div className="relative">
-                <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <Input
-                  type="search"
-                  placeholder={t('Search users...')}
-                  value={search}
-                  onChange={(e) => handleSearch(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
+        <Card padding="none" className="overflow-hidden">
+          <div className="border-b border-gray-200 p-4 sm:px-6">
+            <div className="relative max-w-md">
+              <MagnifyingGlassIcon
+                className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400"
+                aria-hidden="true"
+              />
+              <Input
+                type="search"
+                aria-label={t('Search users')}
+                placeholder={t('Search users...')}
+                value={search}
+                onChange={(e) => handleSearch(e.target.value)}
+                className="pl-10"
+              />
             </div>
           </div>
-        </Card>
 
-        {/* Users Table */}
-        <Card>
           {usersQuery.isPending ? (
             <div className="py-12">
               <Loading size="lg" text={t('Loading users...')} />
@@ -203,32 +199,14 @@ export function UsersPage() {
                 onEnrollFace={handleEnrollFace}
                 canManageElevatedUsers={canManageElevatedUsers}
               />
-
-              {/* Pagination */}
-              {users && users.pages > 1 && (
-                <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200">
-                  <p className="text-sm text-gray-500">
-                    {t('Page')} {users.page} {t('of')} {users.pages} ({users.total} {t('users')})
-                  </p>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => setPage(page - 1)}
-                      disabled={page === 1}
-                    >
-                      {t('Previous')}
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => setPage(page + 1)}
-                      disabled={page === users.pages}
-                    >
-                      {t('Next')}
-                    </Button>
-                  </div>
-                </div>
+              {users && (
+                <Pagination
+                  page={users.page}
+                  pages={users.pages}
+                  total={users.total}
+                  itemLabel={t('users')}
+                  onPageChange={setPage}
+                />
               )}
             </>
           )}

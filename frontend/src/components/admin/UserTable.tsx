@@ -69,9 +69,6 @@ export function UserTable({
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               {t('Face Enrolled')}
             </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              {t('Last Activity')}
-            </th>
             <th className="relative px-6 py-3">
               <span className="sr-only">{t('Actions')}</span>
             </th>
@@ -82,7 +79,7 @@ export function UserTable({
             <tr key={user.id} className="hover:bg-gray-50">
               <td className="px-6 py-4 whitespace-nowrap">
                 <div className="flex items-center">
-                  <div className="w-10 h-10 flex-shrink-0 bg-primary-100 rounded-full flex items-center justify-center">
+                  <div className="w-10 h-10 flex-shrink-0 bg-primary-100 rounded-full flex items-center justify-center" aria-hidden="true">
                     <span className="text-sm font-medium text-primary-700">
                       {user.name.charAt(0).toUpperCase()}
                     </span>
@@ -109,17 +106,19 @@ export function UserTable({
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
                 {user.enrolled_at ? (
-                  <Badge variant="success" dot>
-                    {t('Enrolled')}
-                  </Badge>
+                  <>
+                    <Badge variant="success" dot>
+                      {t('Enrolled')}
+                    </Badge>
+                    <span className="mt-1 block text-xs text-gray-500">
+                      {formatSmartDate(user.enrolled_at)}
+                    </span>
+                  </>
                 ) : (
                   <Badge variant="warning" dot>
                     {t('Not Enrolled')}
                   </Badge>
                 )}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {user.enrolled_at ? formatSmartDate(user.enrolled_at) : t('Never')}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                 {(canManageElevatedUsers || user.role === 'member') && (

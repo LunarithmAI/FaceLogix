@@ -3,6 +3,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
+import { Alert } from '@/components/ui/Alert';
+import { Badge } from '@/components/ui/Badge';
+import { Loading } from '@/components/ui/Loading';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Select } from '@/components/ui/Select';
 import { shiftsApi } from '@/services/shifts';
 import { unitsApi } from '@/services/units';
 import { useAuthStore } from '@/stores/authStore';
@@ -70,22 +75,23 @@ export function ShiftsPage() {
     assignMutation.error ??
     shiftsQuery.error;
 
+  const shifts = shiftsQuery.data ?? [];
+
   return (
     <div className="space-y-6">
-      <header>
-        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-primary-600">{t('Scheduling')}</p>
-        <h1 className="mt-1 text-3xl font-bold text-gray-900">{t('Shifts')}</h1>
-        <p className="mt-2 text-gray-600">{t('Define attendance windows, grace periods, and scheduled weekdays.')}</p>
-      </header>
+      <PageHeader
+        title={t('Shifts')}
+        description={t('Define attendance windows, grace periods, and scheduled weekdays.')}
+      />
 
       {isAdmin && (
-        <Card className="p-5">
-          <form className="space-y-4" onSubmit={(event) => {
+        <Card>
+          <form className="space-y-5" onSubmit={(event) => {
             event.preventDefault();
             if (editingId) editMutation.mutate();
             else createMutation.mutate();
           }}>
-            <div className="grid gap-4 md:grid-cols-5">
+            <div className="grid items-end gap-4 sm:grid-cols-2 lg:grid-cols-5">
               <Input label={t('Shift name')} value={name} onChange={(event) => setName(event.target.value)} required />
               <Input label={t('Start Time')} type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} required />
               <Input label={t('End Time')} type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} required />
@@ -94,10 +100,18 @@ export function ShiftsPage() {
             </div>
             <fieldset>
               <legend className="text-sm font-medium text-gray-700">{t('Scheduled weekdays')}</legend>
-              <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2">
+              <div className="mt-2 flex flex-wrap gap-2">
                 {WEEKDAYS.map((day, index) => (
-                  <label key={day} className="flex items-center gap-2 text-sm text-gray-700">
-                    <input type="checkbox" checked={weekdays.includes(index)} onChange={(event) => setWeekdays((current) => event.target.checked ? [...current, index].sort() : current.filter((value) => value !== index))} />
+                  <label
+                    key={day}
+                    className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-gray-300 px-3 text-sm text-gray-700 transition-colors hover:bg-gray-50 has-[:checked]:border-primary-500 has-[:checked]:bg-primary-50 has-[:checked]:text-primary-700 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary-500 motion-reduce:transition-none"
+                  >
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-primary-600"
+                      checked={weekdays.includes(index)}
+                      onChange={(event) => setWeekdays((current) => event.target.checked ? [...current, index].sort() : current.filter((value) => value !== index))}
+                    />
                     {t(day)}
                   </label>
                 ))}
@@ -111,52 +125,81 @@ export function ShiftsPage() {
         </Card>
       )}
 
-      {error instanceof Error && <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">{error.message}</p>}
+      {error instanceof Error && <Alert>{t(error.message)}</Alert>}
 
-      <Card>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wide text-gray-500"><tr><th className="px-5 py-3">{t('Shift')}</th><th className="px-5 py-3">{t('Window')}</th><th className="px-5 py-3">{t('Weekdays')}</th><th className="px-5 py-3">{t('Status')}</th><th className="px-5 py-3 text-right">{t('Actions')}</th></tr></thead>
-            <tbody className="divide-y divide-gray-100">
-              {(shiftsQuery.data ?? []).map((shift) => (
-                <tr key={shift.id}>
-                  <td className="px-5 py-4 font-medium text-gray-900">{shift.name}</td>
-                  <td className="px-5 py-4 text-gray-600">{shift.start_time.slice(0, 5)}–{shift.end_time.slice(0, 5)}</td>
-                  <td className="px-5 py-4 text-gray-600">{shift.scheduled_weekdays.map((day) => t(WEEKDAYS[day])).join(', ')}</td>
-                  <td className="px-5 py-4 text-gray-600">{shift.is_active ? t('Active') : t('Archived')}</td>
-                  <td className="px-5 py-4 text-right">
-                    {isAdmin && (
-                      <span className="inline-flex gap-2">
-                        <Button type="button" variant="secondary" size="sm" onClick={() => {
-                          setEditingId(shift.id);
-                          setName(shift.name);
-                          setStartTime(shift.start_time.slice(0, 5));
-                          setEndTime(shift.end_time.slice(0, 5));
-                          setLateGrace(shift.late_grace_minutes);
-                          setEarlyGrace(shift.early_departure_grace_minutes);
-                          setWeekdays(shift.scheduled_weekdays);
-                          window.scrollTo({ top: 0 });
-                        }}>{t('Edit')}</Button>
-                        <Button type="button" variant="secondary" size="sm" onClick={() => archiveMutation.mutate({ id: shift.id, active: !shift.is_active })}>{shift.is_active ? t('Archive') : t('Restore')}</Button>
-                      </span>
-                    )}
-                  </td>
+      <Card padding="none" className="overflow-hidden">
+        {shiftsQuery.isPending ? (
+          <div className="py-12">
+            <Loading size="lg" text={t('Loading shifts...')} />
+          </div>
+        ) : shifts.length === 0 ? (
+          <p className="py-12 text-center text-gray-500">{t('No shifts yet')}</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wider text-gray-500 [&_th]:font-medium">
+                <tr>
+                  <th className="px-6 py-3">{t('Shift')}</th>
+                  <th className="px-6 py-3">{t('Window')}</th>
+                  <th className="px-6 py-3">{t('Weekdays')}</th>
+                  <th className="px-6 py-3">{t('Status')}</th>
+                  <th className="px-6 py-3 text-right">{t('Actions')}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {shifts.map((shift) => (
+                  <tr key={shift.id} className={editingId === shift.id ? 'bg-primary-50' : 'hover:bg-gray-50'}>
+                    <td className="px-6 py-3 font-medium text-gray-900">{shift.name}</td>
+                    <td className="whitespace-nowrap px-6 py-3 tabular-nums text-gray-600">{shift.start_time.slice(0, 5)}–{shift.end_time.slice(0, 5)}</td>
+                    <td className="px-6 py-3 text-gray-600">{shift.scheduled_weekdays.map((day) => t(WEEKDAYS[day])).join(', ')}</td>
+                    <td className="px-6 py-3">
+                      <Badge variant={shift.is_active ? 'success' : 'default'} dot>
+                        {shift.is_active ? t('Active') : t('Archived')}
+                      </Badge>
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-3 text-right">
+                      {isAdmin && (
+                        <span className="inline-flex gap-2">
+                          <Button type="button" variant="secondary" size="sm" onClick={() => {
+                            setEditingId(shift.id);
+                            setName(shift.name);
+                            setStartTime(shift.start_time.slice(0, 5));
+                            setEndTime(shift.end_time.slice(0, 5));
+                            setLateGrace(shift.late_grace_minutes);
+                            setEarlyGrace(shift.early_departure_grace_minutes);
+                            setWeekdays(shift.scheduled_weekdays);
+                            window.scrollTo({ top: 0 });
+                          }}>{t('Edit')}</Button>
+                          <Button type="button" variant="ghost" size="sm" onClick={() => archiveMutation.mutate({ id: shift.id, active: !shift.is_active })}>{shift.is_active ? t('Archive') : t('Restore')}</Button>
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
 
       {isAdmin && (
-        <Card className="p-5">
+        <Card>
           <h2 className="text-lg font-semibold text-gray-900">{t('Assign a shift to a unit')}</h2>
-          <div className="mt-4 grid items-end gap-4 sm:grid-cols-4">
-            <label className="text-sm font-medium text-gray-700">{t('Unit')}<select value={unitId} onChange={(event) => setUnitId(event.target.value)} className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2"><option value="">{t('Select unit')}</option>{(unitsQuery.data ?? []).map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select></label>
-            <label className="text-sm font-medium text-gray-700">{t('Shift')}<select value={shiftId} onChange={(event) => setShiftId(event.target.value)} className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2"><option value="">{t('Clear assignment')}</option>{(shiftsQuery.data ?? []).filter((shift) => shift.is_active).map((shift) => <option key={shift.id} value={shift.id}>{shift.name}</option>)}</select></label>
+          <div className="mt-4 grid items-end gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Select label={t('Unit')} value={unitId} onChange={(event) => setUnitId(event.target.value)}>
+              <option value="">{t('Select unit')}</option>
+              {(unitsQuery.data ?? []).map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
+            </Select>
+            <Select label={t('Shift')} value={shiftId} onChange={(event) => setShiftId(event.target.value)}>
+              <option value="">{t('Clear assignment')}</option>
+              {shifts.filter((shift) => shift.is_active).map((shift) => <option key={shift.id} value={shift.id}>{shift.name}</option>)}
+            </Select>
             <Input label={t('Effective from')} type="date" value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} />
             <Button type="button" disabled={!unitId} onClick={() => assignMutation.mutate()} isLoading={assignMutation.isPending}>{t('Apply to unit')}</Button>
           </div>
+          {assignMutation.isSuccess && (
+            <Alert variant="success" className="mt-4">{t('Shift assignment saved')}</Alert>
+          )}
         </Card>
       )}
     </div>

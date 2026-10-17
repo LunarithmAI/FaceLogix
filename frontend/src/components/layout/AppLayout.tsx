@@ -23,8 +23,8 @@ export function AppLayout({ children }: AppLayoutProps) {
           menuButtonRef={menuButtonRef}
           onOpenSidebar={() => setIsMobileSidebarOpen(true)}
         />
-        <main id="main-content" className="p-4 sm:p-6">
-          {children}
+        <main id="main-content" className="p-4 sm:p-6 lg:p-8">
+          <div className="mx-auto max-w-7xl">{children}</div>
         </main>
       </div>
     </div>

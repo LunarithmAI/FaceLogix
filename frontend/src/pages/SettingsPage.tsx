@@ -7,12 +7,15 @@ import {
   ServerIcon,
   CheckCircleIcon,
   XCircleIcon,
-  ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Loading } from '@/components/ui/Loading';
+import { Alert } from '@/components/ui/Alert';
+import { Badge } from '@/components/ui/Badge';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Select } from '@/components/ui/Select';
 import { useAuthStore } from '@/stores/authStore';
 import { settingsApi, type OrgSettingsUpdate } from '@/services/settings';
 import { queryKeys } from '@/lib/queryClient';
@@ -157,38 +160,27 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t('Settings')}</h1>
-          <p className="text-gray-500 mt-1">{t('Manage organization and system settings')}</p>
-        </div>
-        {isAdmin && (
-          <Button onClick={handleSave} isLoading={saveMutation.isPending}>
-            {t('Save Changes')}
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        title={t('Settings')}
+        description={t('Manage organization and system settings')}
+        actions={
+          isAdmin ? (
+            <Button onClick={handleSave} isLoading={saveMutation.isPending}>
+              {t('Save Changes')}
+            </Button>
+          ) : undefined
+        }
+      />
 
-      {/* Messages */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2">
-          <ExclamationTriangleIcon className="w-5 h-5" />
-          {t(error)}
-        </div>
-      )}
+      {error && <Alert>{t(error)}</Alert>}
       {successMessage && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center gap-2">
-          <CheckCircleIcon className="w-5 h-5" />
-          {t(successMessage.key, successMessage.options)}
-        </div>
+        <Alert variant="success">{t(successMessage.key, successMessage.options)}</Alert>
       )}
 
       {!isAdmin && (
-        <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 px-4 py-3 rounded-lg flex items-center gap-2">
-          <ExclamationTriangleIcon className="w-5 h-5" />
+        <Alert variant="warning">
           {t('You have read-only access. Contact an administrator to make changes.')}
-        </div>
+        </Alert>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -196,7 +188,7 @@ export function SettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <BuildingOfficeIcon className="w-5 h-5 text-gray-500" />
+              <BuildingOfficeIcon className="w-5 h-5 text-gray-500" aria-hidden="true" />
               {t('Organization')}
             </CardTitle>
           </CardHeader>
@@ -208,29 +200,26 @@ export function SettingsPage() {
                 onChange={(e) => handleInputChange('name', e.target.value)}
                 disabled={!isAdmin}
               />
-              <div>
-                <label htmlFor="organization-timezone" className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('Timezone')}
-                </label>
-                <select
-                  id="organization-timezone"
-                  value={formData.timezone}
-                  onChange={(e) => handleInputChange('timezone', e.target.value)}
-                  disabled={!isAdmin}
-                  className="block w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                >
-                  {TIMEZONES.map((tz) => (
-                    <option key={tz.value} value={tz.value}>
-                      {t(tz.label)}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <Select
+                id="organization-timezone"
+                label={t('Timezone')}
+                value={formData.timezone}
+                onChange={(e) => handleInputChange('timezone', e.target.value)}
+                disabled={!isAdmin}
+              >
+                {TIMEZONES.map((tz) => (
+                  <option key={tz.value} value={tz.value}>
+                    {t(tz.label)}
+                  </option>
+                ))}
+              </Select>
               {orgSettings && (
-                <div className="pt-2 text-sm text-gray-500">
-                  <p>{t('Slug')}: {orgSettings.slug}</p>
-                  <p>{t('Created')}: {formatShortDate(orgSettings.created_at)}</p>
-                </div>
+                <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 border-t border-gray-100 pt-4 text-sm">
+                  <dt className="text-gray-500">{t('Slug')}</dt>
+                  <dd className="font-mono text-gray-900">{orgSettings.slug}</dd>
+                  <dt className="text-gray-500">{t('Created')}</dt>
+                  <dd className="text-gray-900">{formatShortDate(orgSettings.created_at)}</dd>
+                </dl>
               )}
             </div>
           </CardContent>
@@ -241,19 +230,19 @@ export function SettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <ShieldCheckIcon className="w-5 h-5 text-gray-500" />
+              <ShieldCheckIcon className="w-5 h-5 text-gray-500" aria-hidden="true" />
               {t('Security & Verification')}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <label className="flex items-center gap-3 cursor-pointer">
+              <label className="flex cursor-pointer items-start gap-3">
                 <input
                   type="checkbox"
                   checked={formData.settings?.require_liveness ?? true}
                   onChange={(e) => handleSettingsChange('require_liveness', e.target.checked)}
                   disabled={!isAdmin}
-                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 accent-primary-600"
                 />
                 <div>
                   <span className="text-sm font-medium text-gray-700">{t('Require Liveness Detection')}</span>
@@ -277,7 +266,7 @@ export function SettingsPage() {
                   value={formData.settings?.liveness_threshold ?? 0.8}
                   onChange={(e) => handleSettingsChange('liveness_threshold', parseFloat(e.target.value))}
                   disabled={!isAdmin}
-                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  className="w-full cursor-pointer accent-primary-600 disabled:cursor-not-allowed"
                 />
               </div>
 
@@ -297,7 +286,7 @@ export function SettingsPage() {
                   value={formData.settings?.face_match_threshold ?? 0.75}
                   onChange={(e) => handleSettingsChange('face_match_threshold', parseFloat(e.target.value))}
                   disabled={!isAdmin}
-                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  className="w-full cursor-pointer accent-primary-600 disabled:cursor-not-allowed"
                 />
                 <div className="flex justify-between text-xs text-gray-500 mt-1">
                   <span>{t('More lenient')}</span>
@@ -312,7 +301,7 @@ export function SettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <ServerIcon className="w-5 h-5 text-gray-500" />
+              <ServerIcon className="w-5 h-5 text-gray-500" aria-hidden="true" />
               {t('System Status')}
             </CardTitle>
           </CardHeader>
@@ -326,19 +315,17 @@ export function SettingsPage() {
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600">{t('Environment')}</span>
-                    <span className="px-2 py-1 bg-gray-100 rounded text-sm font-medium">
-                      {systemInfo.environment}
-                    </span>
+                    <Badge>{systemInfo.environment}</Badge>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600">{t('Database')}</span>
                     <span className={`flex items-center gap-1 ${
-                      systemInfo.database_status === 'connected' ? 'text-green-600' : 'text-red-600'
+                      systemInfo.database_status === 'connected' ? 'text-green-700' : 'text-red-700'
                     }`}>
                       {systemInfo.database_status === 'connected' ? (
-                        <CheckCircleIcon className="w-4 h-4" />
+                        <CheckCircleIcon className="w-4 h-4" aria-hidden="true" />
                       ) : (
-                        <XCircleIcon className="w-4 h-4" />
+                        <XCircleIcon className="w-4 h-4" aria-hidden="true" />
                       )}
                       {t(systemInfo.database_status)}
                     </span>
@@ -346,13 +333,13 @@ export function SettingsPage() {
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600">{t('Face Service')}</span>
                     <span className={`flex items-center gap-1 ${
-                      systemInfo.face_service_status === 'online' ? 'text-green-600' : 
-                      systemInfo.face_service_status === 'offline' ? 'text-red-600' : 'text-gray-600'
+                      systemInfo.face_service_status === 'online' ? 'text-green-700' : 
+                      systemInfo.face_service_status === 'offline' ? 'text-red-700' : 'text-gray-600'
                     }`}>
                       {systemInfo.face_service_status === 'online' ? (
-                        <CheckCircleIcon className="w-4 h-4" />
+                        <CheckCircleIcon className="w-4 h-4" aria-hidden="true" />
                       ) : systemInfo.face_service_status === 'offline' ? (
-                        <XCircleIcon className="w-4 h-4" />
+                        <XCircleIcon className="w-4 h-4" aria-hidden="true" />
                       ) : null}
                       {t(systemInfo.face_service_status)}
                     </span>
@@ -394,7 +381,7 @@ export function SettingsPage() {
         <CardContent>
           <div className="flex items-start gap-4 py-2">
             <div className="p-2 bg-primary-100 rounded-lg">
-              <Cog6ToothIcon className="w-6 h-6 text-primary-600" />
+              <Cog6ToothIcon className="w-6 h-6 text-primary-600" aria-hidden="true" />
             </div>
             <div>
               <h3 className="font-medium text-gray-900">{t('About Settings')}</h3>

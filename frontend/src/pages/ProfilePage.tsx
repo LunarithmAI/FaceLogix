@@ -4,7 +4,6 @@ import {
   UserCircleIcon,
   KeyIcon,
   ShieldCheckIcon,
-  CheckCircleIcon,
   CalendarIcon,
   ArrowLeftOnRectangleIcon,
 } from '@heroicons/react/24/outline';
@@ -12,7 +11,9 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Loading } from '@/components/ui/Loading';
-import { RoleBadge } from '@/components/ui/Badge';
+import { Alert } from '@/components/ui/Alert';
+import { Badge, RoleBadge, StatusBadge } from '@/components/ui/Badge';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { authApi } from '@/services/auth';
 import { queryKeys } from '@/lib/queryClient';
 import { formatShortDate } from '@/utils/date';
@@ -88,38 +89,31 @@ export function ProfilePage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t('Your Profile')}</h1>
-          <p className="mt-1 text-gray-500">{t('View and manage your account information')}</p>
-        </div>
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() => void logout()}
-          leftIcon={<ArrowLeftOnRectangleIcon className="h-5 w-5" />}
-        >
-          {t('Sign out')}
-        </Button>
-      </div>
+      <PageHeader
+        title={t('Your Profile')}
+        description={t('View and manage your account information')}
+        actions={
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => void logout()}
+            leftIcon={<ArrowLeftOnRectangleIcon className="h-5 w-5" aria-hidden="true" />}
+          >
+            {t('Sign out')}
+          </Button>
+        }
+      />
 
-      {/* Messages */}
-      {successMessage && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center gap-2">
-          <CheckCircleIcon className="w-5 h-5" />
-          {t(successMessage)}
-        </div>
-      )}
+      {successMessage && <Alert variant="success">{t(successMessage)}</Alert>}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Profile Card */}
         <Card className="lg:col-span-1">
           <CardContent className="pt-6">
             <div className="text-center">
-              <div className="w-24 h-24 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <div className="mx-auto mb-4 flex h-24 w-24 items-center justify-center rounded-full bg-primary-100 ring-4 ring-primary-50">
                 <span className="text-3xl font-bold text-primary-700">
-                  {displayProfile.name?.charAt(0) || 'U'}
+                  {displayProfile.name?.charAt(0).toUpperCase() || 'U'}
                 </span>
               </div>
               <h2 className="text-xl font-semibold text-gray-900">{displayProfile.name}</h2>
@@ -128,18 +122,11 @@ export function ProfilePage() {
                 <RoleBadge role={displayProfile.role} />
               </div>
               
-              {/* Status badges */}
-              <div className="flex justify-center gap-2 mt-4">
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                  displayProfile.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                }`}>
-                  {displayProfile.is_active ? t('Active') : t('Inactive')}
-                </span>
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                  displayProfile.enrolled_at ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800'
-                }`}>
+              <div className="mt-4 flex flex-wrap justify-center gap-2">
+                <StatusBadge status={displayProfile.is_active ? 'active' : 'inactive'} />
+                <Badge variant={displayProfile.enrolled_at ? 'success' : 'warning'} dot>
                   {displayProfile.enrolled_at ? t('Face Enrolled') : t('Not Enrolled')}
-                </span>
+                </Badge>
               </div>
             </div>
           </CardContent>
@@ -149,7 +136,7 @@ export function ProfilePage() {
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <UserCircleIcon className="w-5 h-5 text-gray-500" />
+              <UserCircleIcon className="w-5 h-5 text-gray-500" aria-hidden="true" />
               {t('Account Details')}
             </CardTitle>
           </CardHeader>
@@ -197,13 +184,13 @@ export function ProfilePage() {
         <Card className="lg:col-span-3">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <KeyIcon className="w-5 h-5 text-gray-500" />
+              <KeyIcon className="w-5 h-5 text-gray-500" aria-hidden="true" />
               {t('Security')}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {!showPasswordForm ? (
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="font-medium text-gray-900">{t('Password')}</p>
                   <p className="text-sm text-gray-500">{t('Change your account password')}</p>
@@ -214,11 +201,7 @@ export function ProfilePage() {
               </div>
             ) : (
               <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
-                {passwordError && (
-                  <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">
-                    {t(passwordError)}
-                  </div>
-                )}
+                {passwordError && <Alert>{t(passwordError)}</Alert>}
                 <Input
                   label={t('Current Password')}
                   type="password"

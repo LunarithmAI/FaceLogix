@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { Alert } from '@/components/ui/Alert';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
+import { Pagination } from '@/components/ui/Pagination';
+import { Select } from '@/components/ui/Select';
 
 function ModalHarness() {
   const [isOpen, setIsOpen] = useState(false);
@@ -52,5 +55,43 @@ describe('UI primitives', () => {
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(trigger).toHaveFocus();
+  });
+
+  it('associates labels and errors with selects', () => {
+    render(
+      <Select label="Unit" error="Unit is required">
+        <option value="">Select unit</option>
+      </Select>
+    );
+
+    const select = screen.getByRole('combobox', { name: 'Unit' });
+    expect(select).toHaveAttribute('aria-invalid', 'true');
+    expect(select).toHaveAttribute('aria-describedby', screen.getByRole('alert').id);
+  });
+
+  it('announces errors assertively and other alerts politely', () => {
+    const { rerender } = render(<Alert>Export failed</Alert>);
+    expect(screen.getByRole('alert')).toHaveTextContent('Export failed');
+
+    rerender(<Alert variant="success">Saved</Alert>);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Saved');
+  });
+
+  it('pages within bounds and hides itself for a single page', async () => {
+    const user = userEvent.setup();
+    const onPageChange = vi.fn();
+    const { rerender } = render(
+      <Pagination page={1} pages={3} total={25} itemLabel="users" onPageChange={onPageChange} />
+    );
+
+    expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+    expect(onPageChange).toHaveBeenCalledWith(2);
+
+    rerender(
+      <Pagination page={1} pages={1} total={5} itemLabel="users" onPageChange={onPageChange} />
+    );
+    expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
   });
 });
